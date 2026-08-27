@@ -1,0 +1,19 @@
+{
+  "server": {
+    "url": "http://WORKBENCH_HOST:8000",
+    "token_env": "WORKBENCH_AGENT_TOKEN"
+  },
+  "device": {
+    "id": "lab-5090",
+    "name": "Lab RTX 5090"
+  },
+  "projects": [
+    {
+      "key": "semantic-segmentation",
+      "project_id": "TODO_PROJECT_ID",
+      "path": "D:\\PATH\\TO\\Semantic-Segmentation",
+      "source_type": "remote_workspace",
+      "source_key": "workspace:semantic-segmentation"
+    }
+  ]
+}
