@@ -166,7 +166,7 @@ $literature-radar
 把结果保存到 research_outputs/<timestamp>/。
 ```
 
-Skill 会自动按 PATH → Windows `zotero-cli.exe` → `uv tool dir --bin` 的顺序定位可执行文件，并先执行只读 `zotero-cli config` preflight。成功运行会生成 `result.json` 和 `report.md`。`research_outputs/` 已被 Git 忽略。这个 Skill 不调用 `workbench-agent research run`，也不复用或修改现有 Paper Research Worker。
+Skill 会自动按 PATH → Windows `zotero-cli.exe` → `uv tool dir --bin` 的顺序定位可执行文件，并先执行只读 config preflight。V0.1 helper 强制子进程 UTF-8、严格解析 JSON envelope、用 batch search 隔离单个 library query 失败，并提供 paper identity merge 与 result/report validator。外部来源按 success / degraded / failed / not_attempted 记录；在线发表、预印本和 issue/print 日期分别核验。成功运行会生成 `result.json` 和 `report.md`。`research_outputs/` 已被 Git 忽略。这个 Skill 不调用 `workbench-agent research run`，也不复用或修改现有 Paper Research Worker。
 
 ## 使用
 

@@ -1,5 +1,7 @@
 # Search strategy
 
+Also read [source-degradation.md](source-degradation.md) and [metadata-policy.md](metadata-policy.md).
+
 Use this reference after Library Context has been collected.
 
 ## 1. Define the window
@@ -34,7 +36,7 @@ Treat exclusions semantically. `on-chip photonics` and `silicon photonics` shoul
 | DOI/Crossref | DOI metadata reconciliation | authoritative metadata, not always full evidence |
 | Publisher/proceedings page | canonical publication status and article metadata | primary |
 
-Do not force a source to appear in `sources_used` merely because it is listed in the profile. Record a source only when a real query or page retrieval succeeded. If a source is unavailable or rate-limited, add a warning and continue only if other requested sources provide adequate coverage.
+Do not force a source to appear in `sources_used` merely because it is listed in the profile. Record every requested source with `success`, `degraded`, `failed`, or `not_attempted`. Anonymous optional APIs use at most two attempts and bounded backoff as defined in `source-degradation.md`. Continue after an optional failure only when other sources provide adequate discovery and primary evidence.
 
 ## 4. Candidate bookkeeping
 
@@ -51,11 +53,11 @@ Keep a compact scratch table with:
 - likely Zotero duplicate;
 - verification URLs.
 
-`candidate_count` means unique external works after DOI/arXiv/title identity merging and before hard screening. Stop collecting at `max_candidates`; deepen verification instead of endlessly expanding.
+`candidate_count` means unique external works after DOI/arXiv/title identity merging and before hard screening. Use `scripts/paper_identity.py` when candidates are materialized as JSON; merge records with a missing DOI against DOI-bearing records by canonical title, and prefer the formal non-repository record as canonical. Stop collecting at `max_candidates`; deepen verification instead of endlessly expanding.
 
 ## 5. Verification and evidence retrieval
 
-Before final selection:
+Before final selection, apply the date semantics in `metadata-policy.md`:
 
 1. Open an arXiv abstract page, publisher/proceedings page, or another canonical primary page.
 2. Confirm title, core author list, date/year, and DOI/arXiv identifier.

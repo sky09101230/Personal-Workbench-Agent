@@ -35,7 +35,7 @@ Do not reduce this to venue prestige or changing citation counts. Abstract-only 
 
 ## Recency
 
-Use the first reliable public date relative to the configured search window:
+Use `date_evidence.first_public_at` from `metadata-policy.md`, not a later issue/print assignment, relative to the configured search window:
 
 - 0–7 days: `1.00`
 - 8–21 days: `0.85`

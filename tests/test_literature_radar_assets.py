@@ -16,6 +16,10 @@ def test_skill_is_project_discoverable_and_complete() -> None:
     assert "description:" in skill_text.split("---", 2)[1]
     assert 'zotero.backend = "cli"' in skill_text
     assert "zotero_cli.py preflight" in skill_text
+    assert "batch-search" in skill_text
+    assert "source_status" in skill_text
+    assert "date_evidence" in skill_text
+    assert "verified_not_selected" in skill_text
     assert "research_tasks/" in skill_text
     assert "result.json" in skill_text
     assert "report.md" in skill_text
@@ -25,9 +29,13 @@ def test_skill_is_project_discoverable_and_complete() -> None:
         "zotero-context.md",
         "screening.md",
         "ranking.md",
+        "source-degradation.md",
+        "metadata-policy.md",
     ):
         assert (SKILL / "references" / name).is_file()
     assert (SKILL / "scripts" / "zotero_cli.py").is_file()
+    assert (SKILL / "scripts" / "paper_identity.py").is_file()
+    assert (SKILL / "scripts" / "validate_output.py").is_file()
 
 
 def test_d2nn_profile_contract() -> None:

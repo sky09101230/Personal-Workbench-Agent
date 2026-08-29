@@ -20,9 +20,9 @@ Use `scripts/zotero_cli.py` from the skill directory. It resolves in this order:
 
 The helper never uses a PowerShell alias or `shell=True`.
 
-Before the first library read, run the helper's `preflight` command. It executes `zotero-cli config`, checks only the exit status, and does not expose the config output. Then issue a small `zotero-cli --json search ...` call. Library access is successful only when stdout parses as JSON and the envelope has `ok: true`.
+Before the first library read, run the helper's `preflight` command. It executes and validates `zotero-cli --json config`, but emits only readiness fields and never the settings payload. Then run `batch-search`. Library access is successful only when at least one query returns a valid `ok: true` envelope and the successful queries provide adequate context.
 
-All subsequent machine-readable calls must use `--json`. Parse stdout only. Treat a nonzero exit, malformed JSON, or `ok != true` as a failure. Do not parse human-oriented Markdown/prose.
+All subsequent machine-readable calls go through the helper. It sets `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`, captures raw bytes, decodes UTF-8 strictly, validates exit/envelope agreement, and emits ASCII-safe JSON escapes. Treat invalid UTF-8, malformed JSON, a nonzero exit, or `ok != true` as a per-command failure. Do not parse human-oriented Markdown/prose.
 
 ## Read-only command boundary
 
@@ -38,7 +38,7 @@ Never use `add`, `edit`, `delete`, `attach`, write-oriented `tags`, duplicate me
 
 ## Bounded context plan
 
-Use the smallest query budget that establishes duplicates and nearby interests. A normal D2NN V0 run should use the strongest five profile-derived searches, each with `--limit 10` or less:
+Use the smallest query budget that establishes duplicates and nearby interests. A normal D2NN V0.1 run uses the strongest five profile-derived searches in one `batch-search`, normally with `--limit 10`:
 
 - diffractive neural network;
 - diffractive optical computing;
@@ -46,7 +46,7 @@ Use the smallest query budget that establishes duplicates and nearby interests. 
 - free-space optical computing;
 - metasurface optical computing.
 
-These are derived from the profile, not hardcoded paper records. Deduplicate returned anchors across queries. Do not traverse the full library.
+These are derived from the profile, not hardcoded paper records. Deduplicate returned anchors across queries. One failed query makes the context `degraded`, not automatically failed; continue when the other queries still cover the core interests and exact finalist duplicate checks remain available. Stop when all queries fail or coverage is materially insufficient. Do not permanently lower the limit to avoid encoding problems. Do not traverse the full library.
 
 Optionally inspect recent relevant items and collections. Semantic search may enrich context if its database is ready; its absence must not block V0. Retrieve detailed metadata only for the most important anchors or an ambiguous duplicate. Do not bulk-read PDFs.
 

@@ -7,7 +7,7 @@ description: Discover and rank recent papers from a research profile by combinin
 
 Run a one-off, repository-local literature discovery pass from a Research Profile. The purpose is to find papers that are both new to the user's Zotero library and worth reading, not to fill a quota.
 
-## V0 boundaries
+## V0.1 boundaries
 
 - Read a JSON profile from `research_profiles/`; do not read or invoke `research_tasks/`.
 - Use the profile's read-only Zotero backend for Library Context. V0 defaults to `zotero.backend = "cli"`; MCP is a future optional backend and is not required for a CLI run.
@@ -32,6 +32,10 @@ Resolve the executable with the stdlib helper:
 ```powershell
 python .agents\skills\literature-radar\scripts\zotero_cli.py resolve
 python .agents\skills\literature-radar\scripts\zotero_cli.py preflight
+python .agents\skills\literature-radar\scripts\zotero_cli.py batch-search `
+  --limit 10 `
+  --query "diffractive neural network" `
+  --query "diffractive optical computing"
 ```
 
 The helper implements this exact order without `shell=True` or PowerShell aliases:
@@ -41,23 +45,23 @@ The helper implements this exact order without `shell=True` or PowerShell aliase
 3. resolve `uv`, run `uv tool dir --bin`, then check `<uv-bin>\zotero-cli.exe` on Windows;
 4. fail explicitly if no executable is found.
 
-`preflight` runs `zotero-cli config` and interprets only the exit status. It never prints the config's potentially sensitive stdout. The first successful `zotero-cli --json search ...` with an envelope containing `ok: true` confirms actual library access.
+`preflight` runs machine-readable `zotero-cli --json config`, validates it, and returns only a non-sensitive readiness summary. The helper forces UTF-8 for the child process, parses raw stdout bytes as UTF-8, and emits ASCII-safe JSON escapes so Windows console code pages and PowerShell redirection cannot corrupt data. The first successful JSON search confirms actual library access.
 
-After resolution, invoke the returned executable as a literal process path. All machine-readable Zotero calls must use `--json`, parse stdout as JSON, require `ok: true`, and ignore human-readable prose. Use only read operations such as `search`, `get metadata`, `get recent`, `get collections`, and optional semantic database status/search. Semantic search may enrich context but must not block V0.
+Use the helper rather than invoking the CLI through a PowerShell alias. All machine-readable Zotero calls use `--json`, raw-byte UTF-8 decoding, strict envelope validation, and safe diagnostics. `batch-search` isolates a failed query and returns `degraded: true` when other queries succeed. Use only read operations such as `search`, `get metadata`, `get recent`, `get collections`, and optional semantic database status/search. Semantic search may enrich context but must not block V0.
 
 ## Required workflow
 
 1. **Load and validate the profile.** Confirm `schema_version == 1`, required arrays are non-empty, `zotero.backend` is supported, `lookback_days`, candidate/result limits are positive, and ranking weights sum to 1. Map `ranking.novelty_to_zotero` to the output score named `novelty`.
 2. **Preflight Zotero first.** For backend `cli`, resolve the executable and run `zotero-cli config` through the helper. Then perform a bounded JSON search to confirm the configured local/web library is readable. If either step fails, stop.
-3. **Build Zotero Library Context.** Run several controlled searches derived from profile interests/include keywords, at most 10 results per query. Deduplicate anchors by DOI → arXiv ID → canonical title → title+year. Inspect detailed metadata only for important anchors. Do not traverse the full library or bulk-read PDFs.
-4. **Plan external queries.** Read [references/search-strategy.md](references/search-strategy.md). Expand concepts, abbreviations, neighboring terms, tasks, and anchor-paper vocabulary from the profile plus Zotero context. Keep the scope centered on the profile and honor exclusions semantically.
+3. **Build Zotero Library Context.** Run the profile-derived searches through `batch-search`, normally with 10 results per query. Continue after an isolated query failure, mark the context degraded, and stop only when successful queries do not provide adequate duplicate/novelty coverage. Deduplicate anchors by DOI → arXiv ID → canonical title → title+year. Inspect detailed metadata only for important anchors. Do not traverse the full library or bulk-read PDFs.
+4. **Plan external queries.** Read [references/search-strategy.md](references/search-strategy.md), [references/source-degradation.md](references/source-degradation.md), and [references/metadata-policy.md](references/metadata-policy.md). Expand concepts, abbreviations, neighboring terms, tasks, and anchor-paper vocabulary from the profile plus Zotero context. Keep the scope centered on the profile and honor exclusions semantically.
 5. **Discover candidates.** Search the requested source families using available Codex web/search capabilities. Treat arXiv, OpenAlex, and Semantic Scholar as discovery/metadata sources; prefer arXiv abstract pages, DOI/publisher pages, and official proceedings pages as primary evidence. Keep at most `search.max_candidates` unique works after identity merging.
-6. **Normalize and verify identity.** Merge versions in DOI → versionless arXiv ID → canonical title → title+year order. Verify title, authors, date/year, publication status, and at least one reliable identifier or primary URL. A preprint and its journal/conference version are one work unless they contain a materially distinct contribution.
+6. **Normalize and verify identity.** Use `scripts/paper_identity.py` or the same deterministic rules to merge versions in DOI → versionless arXiv ID → canonical title → title+year order. Verify title, authors, date/year, publication status, and at least one reliable identifier or primary URL. A preprint and its journal/conference version are one work unless they contain a materially distinct contribution.
 7. **Screen against Zotero.** Read [references/screening.md](references/screening.md). Every candidate must be checked against Library Context. Papers already present are excluded by default, except a clearly important new formal version or major revision; document any exception.
 8. **Read enough primary evidence.** For serious finalists, inspect the abstract and the most relevant accessible method, result, discussion, and limitation material. Prefer full text when accessible, but do not invent details when only an abstract is available. Record evidence depth and make claims no stronger than the material read.
 9. **Rank.** Read [references/ranking.md](references/ranking.md). Score relevance, novelty to Zotero, scientific value, and recency on 0–1 relative scales, then calculate the configured weighted overall score. Do not use keyword presence, citation count, or venue prestige as a substitute for content judgment.
 10. **Write the run artifacts.** Create `research_outputs/<timestamp>/result.json` and `report.md` only after the required dependencies and evidence gates succeed. Sort recommendations by descending `scores.overall`; output fewer than the limit when evidence is insufficient.
-11. **Validate before finishing.** Parse `result.json`, verify its recommendation count and score arithmetic, ensure every recommendation has primary evidence, confirm `report.md` matches the JSON order, and scan both files for secrets or unsupported claims.
+11. **Validate before finishing.** Run `scripts/validate_output.py <result.json> <report.md>`, then parse `result.json`, verify its recommendation count and score arithmetic, ensure every recommendation has primary evidence, confirm `report.md` matches the JSON order, and scan both files for secrets or unsupported claims.
 
 ## Result contract
 
@@ -83,9 +87,11 @@ After resolution, invoke the returned executable as a literal process path. All 
     "queries": [],
     "sources_requested": [],
     "sources_used": [],
+    "source_status": [{"name": "openalex", "status": "success", "attempts": 1, "routes": [], "result_count": 0, "warning": null}],
     "candidate_count": 0,
     "verified_candidate_count": 0
   },
+  "screening": {"verified_not_selected": [], "exclusion_counts": {}},
   "warnings": [],
   "recommendations": []
 }
@@ -104,6 +110,7 @@ Each recommendation must include at least:
   "url": "...",
   "venue": "...",
   "publication_type": "preprint | journal | conference | other",
+  "date_evidence": {"first_public_at": "...", "online_at": null, "issue_at": null, "preprint_at": null, "version_published_at": "...", "selected_reason": "..."},
   "ai_summary": "中文：问题、方法、区别、主要结果、可靠可判断的局限",
   "recommendation_reason": "中文：为什么对该 profile 和当前 Zotero 背景值得读",
   "zotero_relationship": {
@@ -130,6 +137,6 @@ Use `null` for an unknown DOI or arXiv ID; never invent one. `related_papers` ma
 
 ## Report contract
 
-`report.md` is the human acceptance view. Its header must list profile, generation time, lookback window, Zotero backend, context status, anchor count, external source types used, unique candidate count, verified candidate count, final count, and warnings. For each paper show title; authors/date/venue/type; DOI/arXiv; Chinese AI Summary; Why Recommended; Zotero Relationship; the four component scores plus overall; evidence depth; and primary source.
+`report.md` is the human acceptance view. Include the strongest verified-but-not-selected papers and their exclusion reasons so Top N choices are auditable.  Its header must list profile, generation time, lookback window, Zotero backend, context status, anchor count, external source status/degradation, unique candidate count, verified candidate count, final count, and warnings. Explain material online/preprint/issue date semantics for shortlisted papers. For each paper show title; authors/date/venue/type; DOI/arXiv; Chinese AI Summary; Why Recommended; Zotero Relationship; the four component scores plus overall; evidence depth; and primary source.
 
 Finish by returning the absolute paths to both artifacts, counts, selected titles and identifiers, Zotero executable/preflight/query details, dependency status, and warnings. Do not upload or ingest anything.

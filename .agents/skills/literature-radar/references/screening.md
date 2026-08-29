@@ -7,12 +7,12 @@ Screen in two passes: hard evidence gates, then comparative reading value.
 Exclude a candidate from Top N when any of these applies:
 
 - the paper cannot be verified as real;
-- title/authors/year conflict cannot be reconciled;
+- title/authors/identity or publication-date differences cannot be reconciled under `metadata-policy.md`;
 - no DOI, arXiv ID, official proceedings record, or reliable primary paper URL exists;
 - its central topic is outside the profile or primarily matches an excluded direction;
 - it is already in Zotero and has no evidenced formal-version or major-revision exception;
 - the recommendation would require claims not supported by the abstract/full text inspected;
-- it is a duplicate preprint/published representation of another candidate;
+- it is a duplicate preprint/published representation of another candidate; normal online-first versus later issue dates are not duplicates or conflicts;
 - it is an editorial, news article, presentation, patent, dataset page, or secondary commentary rather than the required real paper.
 
 `verified_candidate_count` is the number of unique candidates that pass identity and primary-evidence gates, even if they later rank below the final shortlist.
