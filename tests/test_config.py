@@ -3,7 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from workbench_agent.config import load_config, load_token
+from workbench_agent.config import (
+    default_config_path,
+    default_env_path,
+    load_config,
+    load_env_file,
+    load_token,
+    project_root,
+)
 from workbench_agent.errors import AgentConfigError
 
 
@@ -69,3 +76,27 @@ def test_invalid_server_url_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(AgentConfigError, match="absolute"):
         load_config(write_config(tmp_path, data))
+
+
+def test_default_paths_are_in_project_root() -> None:
+    assert default_config_path() == project_root() / "config.json"
+    assert default_env_path() == project_root() / ".env"
+
+
+def test_load_env_file_reads_values_without_overriding_existing(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        'WORKBENCH_AGENT_TOKEN=from-file\nEXISTING=from-file\nQUOTED="line\\nvalue"\nHASH=abc#123 # comment\n',
+        encoding="utf-8",
+    )
+    environ = {"EXISTING": "from-process"}
+
+    assert load_env_file(env_path, environ=environ) == env_path
+    assert environ["WORKBENCH_AGENT_TOKEN"] == "from-file"
+    assert environ["EXISTING"] == "from-process"
+    assert environ["QUOTED"] == "line\nvalue"
+    assert environ["HASH"] == "abc#123"
+
+
+def test_missing_env_file_is_optional(tmp_path: Path) -> None:
+    assert load_env_file(tmp_path / ".env", environ={}) is None

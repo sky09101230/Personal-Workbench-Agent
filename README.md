@@ -66,18 +66,18 @@ python -m workbench_agent --help
 
 ## 配置
 
-复制 `config.example.json`，不要把真实配置或 token 提交到 Git。
+在 Agent 项目根目录复制 `config.example.json` 为 `config.json`。不要把真实配置或 token 提交到 Git。
 
 默认配置位置：
 
 ```text
-%USERPROFILE%\.workbench-agent\config.json
+<AGENT_PROJECT>\config.json
 ```
 
 也可以显式指定：
 
 ```powershell
-workbench-agent --config D:\path\to\config.json doctor
+workbench-agent doctor
 ```
 
 配置 contract：
@@ -110,10 +110,12 @@ workbench-agent --config D:\path\to\config.json doctor
 - `source_key` 是 ProjectSource 的稳定 identity，不应直接使用可能变化的绝对路径。
 - `device.id` 是机器的稳定 identity，例如 `lab-5090`。
 
-token 只从 `server.token_env` 指向的环境变量读取：
+Agent 启动时会自动读取 `config.json` 同目录下的 `.env`。已有进程环境变量优先，不会被 `.env` 覆盖。token 仍只从 `server.token_env` 指向的环境变量读取：
 
 ```powershell
-$env:WORKBENCH_AGENT_TOKEN="replace-with-real-token"
+Copy-Item .env.example .env
+# 编辑 .env 后直接执行：
+workbench-agent doctor
 ```
 
 Agent 不会输出 token，也不会从示例配置读取真实 secret。所有 HTTP 请求都发送：
@@ -127,10 +129,10 @@ Authorization: Bearer <token>
 ResearchTask 与主配置分离，默认目录为：
 
 ```text
-%USERPROFILE%\.workbench-agent\research_tasks\
+<AGENT_PROJECT>\research_tasks\
 ```
 
-仓库中的 `research_tasks/d2nn-recent-papers.json` 是首个任务。部署时将它复制到默认目录；topic、keywords、排除偏好、回溯天数和结果数量均由该 JSON 管理，不硬编码在 Python 中。
+仓库中的 `research_tasks/d2nn-recent-papers.json` 是首个任务，可以直接作为默认任务使用；topic、keywords、排除偏好、回溯天数和结果数量均由该 JSON 管理，不硬编码在 Python 中。
 
 Codex CLI 必须预先完成登录，并配置可访问的 Zotero MCP。Research prompt 要求先查询最少量的相关 Zotero 上下文，再执行外部检索；Zotero 不可用时不得悄悄声称已使用。
 
@@ -139,7 +141,7 @@ Codex CLI 必须预先完成登录，并配置可访问的 Zotero MCP。Research
 ### doctor
 
 ```powershell
-workbench-agent --config D:\path\to\config.json doctor
+workbench-agent doctor
 ```
 
 检查配置、token 环境变量、`/api/health` 和所有项目路径。它只发送 health GET，绝不发送 heartbeat、source 或 run POST。任一检查失败时退出码非零。
@@ -147,7 +149,7 @@ workbench-agent --config D:\path\to\config.json doctor
 ### heartbeat
 
 ```powershell
-workbench-agent --config D:\path\to\config.json heartbeat
+workbench-agent heartbeat
 ```
 
 幂等上报当前 Device。
@@ -155,7 +157,7 @@ workbench-agent --config D:\path\to\config.json heartbeat
 ### sync
 
 ```powershell
-workbench-agent --config D:\path\to\config.json sync
+workbench-agent sync
 ```
 
 先验证全部本地路径，然后 heartbeat 一次，并为每个配置项目 observe 一次 ProjectSource。返回的 source id 只用于本次进程，不持久化。
@@ -163,7 +165,7 @@ workbench-agent --config D:\path\to\config.json sync
 预览而不写入：
 
 ```powershell
-workbench-agent --config D:\path\to\config.json sync --dry-run
+workbench-agent sync --dry-run
 ```
 
 `--dry-run` 检查路径并显示准备提交的非敏感字段，发送 0 个 HTTP 请求。
@@ -171,7 +173,7 @@ workbench-agent --config D:\path\to\config.json sync --dry-run
 ### observe-run
 
 ```powershell
-workbench-agent --config D:\path\to\config.json observe-run `
+workbench-agent observe-run `
   --project semantic-segmentation `
   --manifest D:\path\to\workbench-run.json
 ```

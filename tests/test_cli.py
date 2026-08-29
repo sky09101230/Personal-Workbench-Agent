@@ -168,3 +168,47 @@ def test_research_errors_have_no_traceback(
     stderr = capsys.readouterr().err  # type: ignore[attr-defined]
     assert str(error) in stderr
     assert "Traceback" not in stderr
+
+
+def test_cli_loads_dotenv_next_to_selected_config(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def __init__(self, url: str, token: str | None) -> None:
+            captured["url"] = url
+            captured["token"] = token
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    class FakeService:
+        def __init__(self, config: object, client: object) -> None:
+            pass
+
+        def heartbeat(self) -> None:
+            captured["heartbeat"] = True
+
+    config_path = write_config(tmp_path, tmp_path)
+    (tmp_path / ".env").write_text(
+        "MISSING_TOKEN=from-dotenv\n", encoding="utf-8"
+    )
+    monkeypatch.delenv("MISSING_TOKEN", raising=False)
+    monkeypatch.setattr("workbench_agent.cli.WorkbenchClient", FakeClient)
+    monkeypatch.setattr("workbench_agent.cli.AgentService", FakeService)
+
+    result = main(["--config", str(config_path), "heartbeat"])
+
+    assert result == 0
+    assert captured == {
+        "url": "http://127.0.0.1:1",
+        "token": "from-dotenv",
+        "heartbeat": True,
+    }
+    assert "Heartbeat accepted" in capsys.readouterr().out  # type: ignore[attr-defined]

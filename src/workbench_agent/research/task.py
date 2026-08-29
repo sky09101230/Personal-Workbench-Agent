@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from ..config import project_root
 from ..errors import ResearchTaskError
 
 
@@ -24,7 +25,7 @@ class ResearchTask:
 
 
 def default_research_task_dir() -> Path:
-    return Path.home() / ".workbench-agent" / "research_tasks"
+    return project_root() / "research_tasks"
 
 
 def _object(value: object, field: str) -> dict[str, object]:

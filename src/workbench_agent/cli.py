@@ -8,7 +8,14 @@ from typing import Sequence
 
 from . import __version__
 from .client import WorkbenchClient
-from .config import AgentConfig, default_config_path, load_config, load_token
+from .config import (
+    AgentConfig,
+    default_config_path,
+    default_env_path,
+    load_config,
+    load_env_file,
+    load_token,
+)
 from .errors import AgentError
 from .research.codex_runner import CodexResearchRunner
 from .research.models import ResearchResult
@@ -111,6 +118,7 @@ def _print_research(result: ResearchResult, *, dry_run: bool) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        load_env_file(default_env_path(args.config))
         config = load_config(args.config)
         if args.command == "research":
             token = None if args.dry_run else load_token(config)

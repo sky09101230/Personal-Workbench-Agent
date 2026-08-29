@@ -3,8 +3,9 @@ from pathlib import Path
 
 import pytest
 
+from workbench_agent.config import project_root
 from workbench_agent.errors import ResearchTaskError
-from workbench_agent.research.task import load_research_task
+from workbench_agent.research.task import default_research_task_dir, load_research_task
 
 
 def task_data() -> dict[str, object]:
@@ -87,3 +88,7 @@ def test_array_fields_are_strict(tmp_path: Path, field: str, value: object) -> N
 
     with pytest.raises(ResearchTaskError, match=field):
         load_research_task("d2nn-recent-papers", tmp_path)
+
+
+def test_default_research_task_dir_is_in_project_root() -> None:
+    assert default_research_task_dir() == project_root() / "research_tasks"
