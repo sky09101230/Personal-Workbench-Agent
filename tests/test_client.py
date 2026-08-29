@@ -100,6 +100,22 @@ def test_run_payload() -> None:
         client.observe_run("source-1", RUN)
 
 
+def test_research_ingest_path_payload_and_auth() -> None:
+    payload = {"schema_version": "1", "task_key": "demo", "papers": []}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/api/news/papers/research/ingest"
+        assert request.headers["Authorization"] == "Bearer secret"
+        assert json_body(request) == payload
+        return httpx.Response(200, json={"status": "accepted"})
+
+    with WorkbenchClient(
+        "http://workbench.example", "secret", transport=httpx.MockTransport(handler)
+    ) as client:
+        assert client.ingest_paper_research(payload) == {"status": "accepted"}
+
+
 @pytest.mark.parametrize("status", [404, 409, 422, 500])
 def test_http_errors_raise_api_error(status: int) -> None:
     transport = httpx.MockTransport(lambda request: httpx.Response(status, json={"detail": "no"}))

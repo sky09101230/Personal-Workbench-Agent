@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "personal-workbench-agent"
 version = "0.1.0"
-description = "Lightweight observation client for Personal Workbench"
+description = "Outbound-only execution client for Personal Workbench"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["httpx>=0.27,<1"]

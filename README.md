@@ -1,24 +1,26 @@
 # Personal Workbench Agent
 
-Personal Workbench Agent 是部署在项目机器上的轻量观察客户端。它直接读取本机真实项目与手动提供的运行清单，并通过 HTTP JSON API 主动向 Personal Workbench 的 `ProjectActivity` 上报当前状态。
+Personal Workbench Agent 是部署在项目机器上的 outbound-only execution client。它提供两个彼此独立的 capability：
+
+- **ProjectActivity Observer**：读取本机项目与手动提供的运行清单，向 `ProjectActivity` 上报真实状态；
+- **Paper Research Worker**：由 Codex CLI 使用 Zotero 研究上下文和外部检索生成严格结构化的论文推荐，并写入 Workbench Papers。
 
 它存在的原因是：训练目录、输出和 checkpoint 经常被 `.gitignore` 排除，运行在日常电脑上的 Personal Workbench 无法通过 GitHub 看见这些真实状态。
 
 ```text
 RTX 5090 / GPU Server                 日常工作电脑
 
-local projects
-      │
-Workbench Agent ── outbound HTTP ──> Personal Workbench
-                                           │
-                                     ProjectActivity
+local projects ─┐
+                ├─ Workbench Agent ── outbound HTTP ──> Personal Workbench
+Codex Research ─┘                                      ├─ ProjectActivity
+                                                       └─ Papers / AI Research
 ```
 
-Personal Workbench **不会 SSH 或主动连接项目机器**。Agent 不接收入站请求、不开放端口，也不启动 FastAPI、Flask 或 WebSocket server。尽管名称中有 Agent，它不是 AI/LLM Agent，也不执行自主决策。
+Personal Workbench **不会 SSH 或主动连接项目机器**。Agent 不接收入站请求、不开放端口，也不启动 FastAPI、Flask 或 WebSocket server。
 
 ## v0.1 范围
 
-v0.1 支持：
+ProjectActivity Observer v0.1 支持：
 
 - JSON 配置与部署诊断；
 - Device heartbeat；
@@ -27,7 +29,15 @@ v0.1 支持：
 - Bearer token；
 - 无写入的 `doctor` 和 `sync --dry-run`。
 
-它不扫描 Git、`runs/`、输出或 checkpoint，不保存本地状态，不推断状态变化，不自动创建 ActivityEvent，也不提供 watcher、scheduler、daemon 或 Windows Service。
+Paper Research Worker v0.1 支持：
+
+- 独立 JSON ResearchTask；
+- Codex CLI 原生 JSON Schema structured output；
+- Agent 侧 ingest schema v1 验证；
+- `research run` 与真实研究但不写 Workbench 的 `--dry-run`；
+- 复用现有 Bearer HTTP client 写入 Workbench。
+
+Agent 不扫描 Git、`runs/`、输出或 checkpoint，不保存第二份论文数据库，不自动创建 ActivityEvent，也不提供 watcher、scheduler、daemon 或 Windows Service。
 
 ## 安装
 
@@ -56,18 +66,18 @@ python -m workbench_agent --help
 
 ## 配置
 
-复制 `config.example.json`，不要把真实配置或 token 提交到 Git。
+在 Agent 项目根目录复制 `config.example.json` 为 `config.json`。不要把真实配置或 token 提交到 Git。
 
 默认配置位置：
 
 ```text
-%USERPROFILE%\.workbench-agent\config.json
+<AGENT_PROJECT>\config.json
 ```
 
 也可以显式指定：
 
 ```powershell
-workbench-agent --config D:\path\to\config.json doctor
+workbench-agent doctor
 ```
 
 配置 contract：
@@ -100,10 +110,12 @@ workbench-agent --config D:\path\to\config.json doctor
 - `source_key` 是 ProjectSource 的稳定 identity，不应直接使用可能变化的绝对路径。
 - `device.id` 是机器的稳定 identity，例如 `lab-5090`。
 
-token 只从 `server.token_env` 指向的环境变量读取：
+Agent 启动时会自动读取 `config.json` 同目录下的 `.env`。已有进程环境变量优先，不会被 `.env` 覆盖。token 仍只从 `server.token_env` 指向的环境变量读取：
 
 ```powershell
-$env:WORKBENCH_AGENT_TOKEN="replace-with-real-token"
+Copy-Item .env.example .env
+# 编辑 .env 后直接执行：
+workbench-agent doctor
 ```
 
 Agent 不会输出 token，也不会从示例配置读取真实 secret。所有 HTTP 请求都发送：
@@ -112,12 +124,24 @@ Agent 不会输出 token，也不会从示例配置读取真实 secret。所有 
 Authorization: Bearer <token>
 ```
 
+## Research task
+
+ResearchTask 与主配置分离，默认目录为：
+
+```text
+<AGENT_PROJECT>\research_tasks\
+```
+
+仓库中的 `research_tasks/d2nn-recent-papers.json` 是首个任务，可以直接作为默认任务使用；topic、keywords、排除偏好、回溯天数和结果数量均由该 JSON 管理，不硬编码在 Python 中。
+
+Codex CLI 必须预先完成登录，并配置可访问的 Zotero MCP。Research prompt 要求先查询最少量的相关 Zotero 上下文，再执行外部检索；Zotero 不可用时不得悄悄声称已使用。
+
 ## 使用
 
 ### doctor
 
 ```powershell
-workbench-agent --config D:\path\to\config.json doctor
+workbench-agent doctor
 ```
 
 检查配置、token 环境变量、`/api/health` 和所有项目路径。它只发送 health GET，绝不发送 heartbeat、source 或 run POST。任一检查失败时退出码非零。
@@ -125,7 +149,7 @@ workbench-agent --config D:\path\to\config.json doctor
 ### heartbeat
 
 ```powershell
-workbench-agent --config D:\path\to\config.json heartbeat
+workbench-agent heartbeat
 ```
 
 幂等上报当前 Device。
@@ -133,7 +157,7 @@ workbench-agent --config D:\path\to\config.json heartbeat
 ### sync
 
 ```powershell
-workbench-agent --config D:\path\to\config.json sync
+workbench-agent sync
 ```
 
 先验证全部本地路径，然后 heartbeat 一次，并为每个配置项目 observe 一次 ProjectSource。返回的 source id 只用于本次进程，不持久化。
@@ -141,7 +165,7 @@ workbench-agent --config D:\path\to\config.json sync
 预览而不写入：
 
 ```powershell
-workbench-agent --config D:\path\to\config.json sync --dry-run
+workbench-agent sync --dry-run
 ```
 
 `--dry-run` 检查路径并显示准备提交的非敏感字段，发送 0 个 HTTP 请求。
@@ -149,12 +173,28 @@ workbench-agent --config D:\path\to\config.json sync --dry-run
 ### observe-run
 
 ```powershell
-workbench-agent --config D:\path\to\config.json observe-run `
+workbench-agent observe-run `
   --project semantic-segmentation `
   --manifest D:\path\to\workbench-run.json
 ```
 
 调用顺序固定为：heartbeat → observe source → observe run。用户无需手动提供 source id。该命令不会创建 ActivityEvent。
+
+### research run
+
+先执行完整 Codex、Zotero 与外部论文检索，但不向 Workbench 写入：
+
+```powershell
+workbench-agent research run d2nn-recent-papers --dry-run
+```
+
+确认推荐质量后执行 ingest：
+
+```powershell
+workbench-agent research run d2nn-recent-papers
+```
+
+每次新执行会生成唯一 `run_key`；同一次执行只在验证成功后 POST。Codex 输出必须通过 Agent 侧 schema v1、task key、时区、论文数量、分数、URL/标识符等验证，不能直接转发。
 
 ## Run manifest contract
 
@@ -197,9 +237,10 @@ Agent 使用 10 秒默认 timeout，访问：
 | POST | `/api/project-activity/sources/observe` | ProjectSource upsert |
 | POST | `/api/project-activity/runs/observe` | ActivityRun upsert |
 | POST | `/api/project-activity/events` | 仅提供 client primitive，v0.1 service/CLI 不调用 |
+| POST | `/api/news/papers/research/ingest` | 写入验证后的 AI Research 推荐 |
 
 HTTP client 与 Personal Workbench 源代码完全解耦。两者唯一共享边界是上述 JSON API。
 
 ## 后续方向
 
-基础链路经过真实联通验证后，可以分别增加 run manifest scanner、Git observer、本地 previous state、observation diff → ActivityEvent，以及 scheduler/daemon。它们不属于 v0.1。
+后续可分别增加 automatic scheduling、Workbench-managed Research Tasks，以及 feedback / personalization；它们不属于本轮 v0.1。

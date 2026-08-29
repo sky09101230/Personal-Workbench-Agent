@@ -1,0 +1,30 @@
+{
+  "key": "d2nn-recent-papers",
+  "name": "D2NN Recent Papers",
+  "topics": [
+    "diffractive neural networks",
+    "free-space optical neural networks",
+    "diffractive optical computing",
+    "metasurface optical computing"
+  ],
+  "keywords": [
+    "diffractive neural network",
+    "optical neural network",
+    "diffractive optical computing",
+    "optical computing",
+    "metasurface neural network"
+  ],
+  "exclude": [
+    "on-chip photonics"
+  ],
+  "lookback_days": 30,
+  "max_candidates": 30,
+  "max_results": 5,
+  "zotero": {
+    "enabled": true
+  },
+  "research": {
+    "require_real_papers": true,
+    "require_primary_sources": true
+  }
+}
