@@ -14,7 +14,8 @@ def test_skill_is_project_discoverable_and_complete() -> None:
 
     assert skill_text.startswith("---\nname: literature-radar\n")
     assert "description:" in skill_text.split("---", 2)[1]
-    assert "server named `zotero`" in skill_text
+    assert 'zotero.backend = "cli"' in skill_text
+    assert "zotero_cli.py preflight" in skill_text
     assert "research_tasks/" in skill_text
     assert "result.json" in skill_text
     assert "report.md" in skill_text
@@ -26,6 +27,7 @@ def test_skill_is_project_discoverable_and_complete() -> None:
         "ranking.md",
     ):
         assert (SKILL / "references" / name).is_file()
+    assert (SKILL / "scripts" / "zotero_cli.py").is_file()
 
 
 def test_d2nn_profile_contract() -> None:
@@ -38,6 +40,7 @@ def test_d2nn_profile_contract() -> None:
     assert profile["time"]["lookback_days"] == 60
     assert profile["zotero"] == {
         "enabled": True,
+        "backend": "cli",
         "use_recent_library": True,
         "use_collections": True,
         "duplicate_detection": True,

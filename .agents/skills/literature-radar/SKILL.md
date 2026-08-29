@@ -10,11 +10,12 @@ Run a one-off, repository-local literature discovery pass from a Research Profil
 ## V0 boundaries
 
 - Read a JSON profile from `research_profiles/`; do not read or invoke `research_tasks/`.
-- Use the MCP server named `zotero` only for read-only library context. Never create, edit, tag, move, import, or delete Zotero data.
+- Use the profile's read-only Zotero backend for Library Context. V0 defaults to `zotero.backend = "cli"`; MCP is a future optional backend and is not required for a CLI run.
+- Never create, edit, tag, move, import, merge, attach, or delete Zotero data.
 - Use external academic search for discovery. Zotero is not the public search engine.
 - Do not call the existing Paper Research Worker, `ResearchService`, Workbench APIs, ingest endpoints, databases, schedulers, daemons, or automations.
 - Do not expose API keys, environment variables, local attachment paths, or secrets in prompts or output files.
-- On a required Zotero or external-search failure, report the exact blocker and stop. Never claim a dependency succeeded or fabricate recommendations.
+- On a required Zotero CLI or external-search failure, report the exact blocker and stop. Never claim a dependency succeeded or fabricate recommendations.
 
 ## Run inputs
 
@@ -22,18 +23,41 @@ Default to `research_profiles/d2nn.json` when the user does not provide a profil
 
 Resolve all paths from the repository root with workspace file tools. Windows-safe output directories use UTC timestamps without colons, for example `research_outputs/20260829T153045Z/`.
 
+## Zotero CLI backend
+
+Read [references/zotero-context.md](references/zotero-context.md) before accessing the library.
+
+Resolve the executable with the stdlib helper:
+
+```powershell
+python .agents\skills\literature-radar\scripts\zotero_cli.py resolve
+python .agents\skills\literature-radar\scripts\zotero_cli.py preflight
+```
+
+The helper implements this exact order without `shell=True` or PowerShell aliases:
+
+1. `shutil.which("zotero-cli")`;
+2. on Windows, `shutil.which("zotero-cli.exe")`;
+3. resolve `uv`, run `uv tool dir --bin`, then check `<uv-bin>\zotero-cli.exe` on Windows;
+4. fail explicitly if no executable is found.
+
+`preflight` runs `zotero-cli config` and interprets only the exit status. It never prints the config's potentially sensitive stdout. The first successful `zotero-cli --json search ...` with an envelope containing `ok: true` confirms actual library access.
+
+After resolution, invoke the returned executable as a literal process path. All machine-readable Zotero calls must use `--json`, parse stdout as JSON, require `ok: true`, and ignore human-readable prose. Use only read operations such as `search`, `get metadata`, `get recent`, `get collections`, and optional semantic database status/search. Semantic search may enrich context but must not block V0.
+
 ## Required workflow
 
-1. **Load and validate the profile.** Confirm `schema_version == 1`, required arrays are non-empty, `lookback_days`, candidate/result limits are positive, and ranking weights sum to 1. Map `ranking.novelty_to_zotero` to the output score named `novelty`.
-2. **Build Zotero Library Context first.** Read [references/zotero-context.md](references/zotero-context.md). Query the MCP server `zotero` with a bounded, read-only strategy. Capture enough verified metadata for duplicate and relationship judgments, but do not traverse the full library or full text. If `zotero.enabled` is true and MCP cannot be called successfully, stop the run.
-3. **Plan external queries.** Read [references/search-strategy.md](references/search-strategy.md). Expand concepts, abbreviations, neighboring terms, tasks, and anchor-paper vocabulary from the profile plus Zotero context. Keep the scope centered on the profile and honor exclusions semantically.
-4. **Discover candidates.** Search the requested source families using available Codex web/search capabilities. Treat arXiv, OpenAlex, and Semantic Scholar as discovery/metadata sources; prefer arXiv abstract pages, DOI/publisher pages, and official proceedings pages as primary evidence. Keep at most `search.max_candidates` unique works after identity merging.
-5. **Normalize and verify identity.** Merge versions in DOI → versionless arXiv ID → canonical title → title+year order. Verify title, authors, date/year, publication status, and at least one reliable identifier or primary URL. A preprint and its journal/conference version are one work unless they contain a materially distinct contribution.
-6. **Screen against Zotero.** Read [references/screening.md](references/screening.md). Every candidate must be checked against Library Context. Papers already present are excluded by default, except a clearly important new formal version or major revision; document any exception.
-7. **Read enough primary evidence.** For serious finalists, inspect the abstract and the most relevant accessible method, result, discussion, and limitation material. Prefer full text when accessible, but do not invent details when only an abstract is available. Record evidence depth and make claims no stronger than the material read.
-8. **Rank.** Read [references/ranking.md](references/ranking.md). Score relevance, novelty to Zotero, scientific value, and recency on 0–1 relative scales, then calculate the configured weighted overall score. Do not use keyword presence, citation count, or venue prestige as a substitute for content judgment.
-9. **Write the run artifacts.** Create `research_outputs/<timestamp>/result.json` and `report.md` only after the required dependencies and evidence gates succeed. Sort recommendations by descending `scores.overall`; output fewer than the limit when evidence is insufficient.
-10. **Validate before finishing.** Parse `result.json`, verify its recommendation count and score arithmetic, ensure every recommendation has primary evidence, confirm `report.md` matches the JSON order, and scan both files for secrets or unsupported claims.
+1. **Load and validate the profile.** Confirm `schema_version == 1`, required arrays are non-empty, `zotero.backend` is supported, `lookback_days`, candidate/result limits are positive, and ranking weights sum to 1. Map `ranking.novelty_to_zotero` to the output score named `novelty`.
+2. **Preflight Zotero first.** For backend `cli`, resolve the executable and run `zotero-cli config` through the helper. Then perform a bounded JSON search to confirm the configured local/web library is readable. If either step fails, stop.
+3. **Build Zotero Library Context.** Run several controlled searches derived from profile interests/include keywords, at most 10 results per query. Deduplicate anchors by DOI → arXiv ID → canonical title → title+year. Inspect detailed metadata only for important anchors. Do not traverse the full library or bulk-read PDFs.
+4. **Plan external queries.** Read [references/search-strategy.md](references/search-strategy.md). Expand concepts, abbreviations, neighboring terms, tasks, and anchor-paper vocabulary from the profile plus Zotero context. Keep the scope centered on the profile and honor exclusions semantically.
+5. **Discover candidates.** Search the requested source families using available Codex web/search capabilities. Treat arXiv, OpenAlex, and Semantic Scholar as discovery/metadata sources; prefer arXiv abstract pages, DOI/publisher pages, and official proceedings pages as primary evidence. Keep at most `search.max_candidates` unique works after identity merging.
+6. **Normalize and verify identity.** Merge versions in DOI → versionless arXiv ID → canonical title → title+year order. Verify title, authors, date/year, publication status, and at least one reliable identifier or primary URL. A preprint and its journal/conference version are one work unless they contain a materially distinct contribution.
+7. **Screen against Zotero.** Read [references/screening.md](references/screening.md). Every candidate must be checked against Library Context. Papers already present are excluded by default, except a clearly important new formal version or major revision; document any exception.
+8. **Read enough primary evidence.** For serious finalists, inspect the abstract and the most relevant accessible method, result, discussion, and limitation material. Prefer full text when accessible, but do not invent details when only an abstract is available. Record evidence depth and make claims no stronger than the material read.
+9. **Rank.** Read [references/ranking.md](references/ranking.md). Score relevance, novelty to Zotero, scientific value, and recency on 0–1 relative scales, then calculate the configured weighted overall score. Do not use keyword presence, citation count, or venue prestige as a substitute for content judgment.
+10. **Write the run artifacts.** Create `research_outputs/<timestamp>/result.json` and `report.md` only after the required dependencies and evidence gates succeed. Sort recommendations by descending `scores.overall`; output fewer than the limit when evidence is insufficient.
+11. **Validate before finishing.** Parse `result.json`, verify its recommendation count and score arithmetic, ensure every recommendation has primary evidence, confirm `report.md` matches the JSON order, and scan both files for secrets or unsupported claims.
 
 ## Result contract
 
@@ -47,9 +71,10 @@ Resolve all paths from the repository root with workspace file tools. Windows-sa
   "search_window": {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "lookback_days": 60},
   "zotero_context": {
     "success": true,
-    "server": "zotero",
-    "queries_used": 0,
-    "known_paper_count": 0,
+    "backend": "cli",
+    "executable": "...",
+    "queries_used": [],
+    "anchor_count": 0,
     "related_collection_count": 0,
     "summary": "...",
     "warnings": []
@@ -101,10 +126,10 @@ Each recommendation must include at least:
 }
 ```
 
-Use `null` for an unknown DOI or arXiv ID; never invent one. `related_papers` may be empty. Do not name a related Zotero paper unless the MCP result actually established that it exists.
+Use `null` for an unknown DOI or arXiv ID; never invent one. `related_papers` may be empty. Do not name a related Zotero paper unless a real CLI result established that it exists.
 
 ## Report contract
 
-`report.md` is the human acceptance view. Its header must list profile, generation time, search window, unique candidate count, verified candidate count, final count, sources requested/used, Zotero success, and warnings. For each paper show title; authors/year/venue/type; DOI/arXiv; Chinese AI Summary; Why Recommended; Zotero Relationship; the four component scores plus overall; evidence depth; and primary source.
+`report.md` is the human acceptance view. Its header must list profile, generation time, lookback window, Zotero backend, context status, anchor count, external source types used, unique candidate count, verified candidate count, final count, and warnings. For each paper show title; authors/date/venue/type; DOI/arXiv; Chinese AI Summary; Why Recommended; Zotero Relationship; the four component scores plus overall; evidence depth; and primary source.
 
-Finish by returning the absolute paths to both artifacts, counts, selected titles, dependency status, and warnings. Do not upload or ingest anything.
+Finish by returning the absolute paths to both artifacts, counts, selected titles and identifiers, Zotero executable/preflight/query details, dependency status, and warnings. Do not upload or ingest anything.

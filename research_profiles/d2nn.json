@@ -28,6 +28,7 @@
   },
   "zotero": {
     "enabled": true,
+    "backend": "cli",
     "use_recent_library": true,
     "use_collections": true,
     "duplicate_detection": true,

@@ -30,7 +30,7 @@ The V0 workflow adapts the upstream project's approach to:
 - Added a deterministic weighted overall score using the profile's four dimensions.
 - Removed Workbench ingest, task execution, databases, scheduling, and all Zotero writes.
 - Did not copy the upstream full-text fetcher, cache, virtual-environment bootstrap, Bash wrappers, Unix installer, smoke-test shell scripts, or source-specific API SDK code.
-- Uses Codex's available MCP and web/search tools so the workflow remains usable on Windows 11 and PowerShell without a new CLI.
+- Uses the existing zotero-cli plus Codex web/search tools so the workflow remains usable on Windows 11 and PowerShell without a new research framework; MCP remains an optional future backend.
 - Full-text inspection is evidence-budgeted for serious finalists rather than requiring the upstream fetch-and-read protocol for every candidate.
 
 No upstream source code or substantial verbatim documentation is vendored in this skill. The attribution is retained because the search and screening methodology materially informed the design.
