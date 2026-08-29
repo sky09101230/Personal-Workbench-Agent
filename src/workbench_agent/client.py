@@ -85,6 +85,13 @@ class WorkbenchClient:
             "POST", "api/project-activity/events", json=dict(payload)
         )
 
+    def ingest_paper_research(
+        self, payload: Mapping[str, object]
+    ) -> dict[str, object]:
+        return self._request(
+            "POST", "api/news/papers/research/ingest", json=dict(payload)
+        )
+
     def _request(
         self,
         method: str,

@@ -20,3 +20,15 @@ class WorkbenchApiError(AgentError):
 
 class ManifestValidationError(AgentError):
     """A run manifest does not satisfy the v0.1 contract."""
+
+
+class ResearchTaskError(AgentError):
+    """A paper research task is missing or invalid."""
+
+
+class CodexExecutionError(AgentError):
+    """Codex could not produce a structured research result."""
+
+
+class ResearchResultValidationError(AgentError):
+    """A Codex research result does not satisfy ingest schema v1."""
