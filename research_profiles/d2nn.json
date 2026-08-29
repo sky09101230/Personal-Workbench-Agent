@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "key": "d2nn",
+  "name": "D2NN Literature Radar",
+  "interests": [
+    "diffractive neural networks",
+    "free-space optical neural networks",
+    "diffractive optical computing",
+    "metasurface optical computing",
+    "optical neural networks"
+  ],
+  "keywords": {
+    "include": [
+      "diffractive neural network",
+      "diffractive optical computing",
+      "optical neural network",
+      "metasurface computing",
+      "free-space optical computing"
+    ],
+    "exclude": [
+      "on-chip photonics",
+      "silicon photonics"
+    ]
+  },
+  "time": {
+    "lookback_days": 60,
+    "prefer_recent": true
+  },
+  "zotero": {
+    "enabled": true,
+    "use_recent_library": true,
+    "use_collections": true,
+    "duplicate_detection": true,
+    "novelty_against_library": true
+  },
+  "search": {
+    "max_candidates": 40,
+    "max_results": 5,
+    "sources": [
+      "arxiv",
+      "openalex",
+      "semantic_scholar",
+      "publisher_web"
+    ],
+    "require_real_paper": true,
+    "require_primary_source": true
+  },
+  "ranking": {
+    "relevance": 0.35,
+    "novelty_to_zotero": 0.3,
+    "scientific_value": 0.2,
+    "recency": 0.15
+  },
+  "output": {
+    "language": "zh-CN",
+    "include_ai_summary": true,
+    "include_recommendation_reason": true,
+    "include_zotero_relationship": true
+  }
+}
