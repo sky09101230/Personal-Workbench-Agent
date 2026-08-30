@@ -142,7 +142,7 @@ python .agents\skills\literature-radar\scripts\academic_sources.py probe `
   --query "diffractive optical neural network"
 ```
 
-Copy only the helper's safe `name/status/attempts/routes/result_count/warning` fields into `search.source_status`; never copy API keys or request headers.
+Copy only the helper's safe `name/status/attempts/routes/result_count/warning` fields into `search.source_status`; never copy API keys or request headers. Semantic Scholar anonymous evidence remains `degraded` by policy, while `success` is reserved for a clean API-key request; do not promote an anonymous `graph_api=success` route to source-level `success`.
 
 ## Report contract
 

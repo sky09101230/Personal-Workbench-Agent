@@ -176,7 +176,7 @@ python .agents\skills\literature-radar\scripts\academic_sources.py probe `
   --query "diffractive optical neural network"
 ```
 
-arXiv Python HTTPS 固定使用 `certifi` CA，并在 Atom 发现后验证官方 arXiv 页面；底层默认 CA 异常只作为 route diagnostic。Semantic Scholar 可从根目录 `.env` 读取可选 `SEMANTIC_SCHOLAR_API_KEY`，仅通过 `x-api-key` header 发送，默认约 1 request/second，并支持 Retry-After、bounded exponential backoff 和 query dedup。helper 输出不包含 key 或请求 header。
+arXiv Python HTTPS 固定使用 `certifi` CA，并在 Atom 发现后验证官方 arXiv 页面；底层默认 CA 异常只作为 route diagnostic。Semantic Scholar 可从根目录 `.env` 读取可选 `SEMANTIC_SCHOLAR_API_KEY`，仅通过 `x-api-key` header 发送，默认约 1 request/second，并支持 Retry-After、bounded exponential backoff 和 query dedup。匿名模式即使获得 evidence 也固定标记为 `degraded`，用于明确共享限流风险；只有无前置受限尝试的 keyed success 才标记 `success`。helper 输出不包含 key 或请求 header。
 
 ## 使用
 

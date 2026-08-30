@@ -132,7 +132,56 @@ def test_arxiv_official_evidence_failure_is_degraded() -> None:
     assert result.warning is not None
 
 
-def test_semantic_scholar_sends_api_key_without_exposing_it() -> None:
+def test_semantic_scholar_anonymous_http_200_is_degraded() -> None:
+    requester = SequenceRequester(
+        [sources.HttpResponse(200, {}, semantic_body())]
+    )
+
+    result = sources.SemanticScholarClient(requester=requester).search(
+        "optical computing",
+        limit=1,
+    )
+
+    assert result.status == "degraded"
+    assert result.result_count == 1
+    assert result.routes[0]["status"] == "success"
+    assert result.routes[0]["authentication"] == "anonymous"
+    assert "no API key is configured" in result.warning
+    assert "shared rate limits" in result.warning
+
+
+def test_semantic_scholar_anonymous_429_then_200_is_degraded() -> None:
+    now = [0.0]
+    sleeps: list[float] = []
+
+    def sleep(value: float) -> None:
+        sleeps.append(value)
+        now[0] += value
+
+    requester = SequenceRequester(
+        [
+            sources.HttpResponse(429, {"Retry-After": "2"}, b""),
+            sources.HttpResponse(200, {}, semantic_body()),
+        ]
+    )
+    client = sources.SemanticScholarClient(
+        requester=requester,
+        monotonic=lambda: now[0],
+        sleep=sleep,
+    )
+
+    result = client.search("optical", limit=1)
+
+    assert result.status == "degraded"
+    assert result.attempts == 2
+    assert result.result_count == 1
+    assert sleeps == [2.0]
+    assert result.routes[0]["retry_after_honored"] is True
+    assert result.routes[1]["status"] == "success"
+    assert "bounded retry" in result.warning
+
+
+def test_semantic_scholar_api_key_http_200_is_success_without_secret_leak() -> None:
     secret = "unit-test-key-not-a-secret"
     requester = SequenceRequester(
         [sources.HttpResponse(200, {}, semantic_body())]
@@ -143,10 +192,58 @@ def test_semantic_scholar_sends_api_key_without_exposing_it() -> None:
     serialized = json.dumps(result.to_payload())
 
     assert result.status == "success"
+    assert result.warning is None
     assert requester.calls[0]["headers"]["x-api-key"] == secret
     assert result.routes[0]["authentication"] == "api_key"
     assert secret not in serialized
     assert "x-api-key" not in serialized.casefold()
+
+
+def test_semantic_scholar_api_key_partial_failure_with_evidence_is_degraded() -> None:
+    now = [0.0]
+    sleeps: list[float] = []
+
+    def sleep(value: float) -> None:
+        sleeps.append(value)
+        now[0] += value
+
+    requester = SequenceRequester(
+        [
+            sources.HttpResponse(429, {}, b""),
+            sources.HttpResponse(200, {}, semantic_body()),
+        ]
+    )
+    client = sources.SemanticScholarClient(
+        api_key="unit-test-key-not-a-secret",
+        requester=requester,
+        monotonic=lambda: now[0],
+        sleep=sleep,
+    )
+
+    result = client.search("optical", limit=1)
+
+    assert result.status == "degraded"
+    assert result.result_count == 1
+    assert result.routes[-1]["status"] == "success"
+    assert result.routes[-1]["authentication"] == "api_key"
+    assert sleeps == [1.0]
+    assert "API-key access returned usable evidence" in result.warning
+
+
+def test_semantic_scholar_no_usable_evidence_is_failed() -> None:
+    requester = SequenceRequester(
+        [sources.HttpResponse(200, {}, json.dumps({"data": []}).encode("utf-8"))]
+    )
+
+    anonymous = sources.SemanticScholarClient(requester=requester).search(
+        "optical",
+        limit=1,
+        fallback_available=True,
+    )
+
+    assert anonymous.status == "failed"
+    assert anonymous.result_count == 0
+    assert "no usable evidence" in anonymous.warning
 
 
 def test_semantic_scholar_rate_limit_and_query_dedup() -> None:
@@ -173,42 +270,14 @@ def test_semantic_scholar_rate_limit_and_query_dedup() -> None:
     duplicate = client.search("optical computing", limit=1)
     second = client.search("different query", limit=1)
 
+    assert first.status == "degraded"
     assert duplicate is first
-    assert second.status == "success"
+    assert second.status == "degraded"
     assert len(requester.calls) == 2
     assert sleeps == [1.0]
 
 
-def test_semantic_scholar_honors_retry_after_then_succeeds() -> None:
-    now = [0.0]
-    sleeps: list[float] = []
-
-    def sleep(value: float) -> None:
-        sleeps.append(value)
-        now[0] += value
-
-    requester = SequenceRequester(
-        [
-            sources.HttpResponse(429, {"Retry-After": "2"}, b""),
-            sources.HttpResponse(200, {}, semantic_body()),
-        ]
-    )
-    client = sources.SemanticScholarClient(
-        requester=requester,
-        monotonic=lambda: now[0],
-        sleep=sleep,
-    )
-
-    result = client.search("optical", limit=1)
-
-    assert result.status == "success"
-    assert result.attempts == 2
-    assert sleeps == [2.0]
-    assert result.routes[0]["retry_after_honored"] is True
-    assert result.routes[0]["retry_delay_seconds"] == 2.0
-
-
-def test_semantic_scholar_uses_bounded_backoff_and_degraded_fallback() -> None:
+def test_semantic_scholar_bounded_backoff_without_evidence_is_failed() -> None:
     now = [0.0]
     sleeps: list[float] = []
 
@@ -231,25 +300,11 @@ def test_semantic_scholar_uses_bounded_backoff_and_degraded_fallback() -> None:
 
     result = client.search("optical", limit=1, fallback_available=True)
 
-    assert result.status == "degraded"
+    assert result.status == "failed"
     assert result.attempts == 3
     assert result.result_count == 0
     assert sleeps == [1.0, 2.0]
-    assert "Other sources supplied usable evidence" in result.warning
-
-
-def test_semantic_scholar_without_fallback_is_failed() -> None:
-    requester = SequenceRequester(
-        [sources.HttpResponse(429, {}, b"")]
-    )
-    client = sources.SemanticScholarClient(
-        requester=requester,
-        max_attempts=1,
-    )
-
-    result = client.search("optical", limit=1)
-
-    assert result.status == "failed"
+    assert "Other sources may still provide run-level coverage" in result.warning
 
 
 def test_api_key_reads_only_named_environment_value() -> None:

@@ -417,14 +417,36 @@ class SemanticScholarClient:
                         "result_count": len(items),
                     }
                 )
-                status = "success" if items else "failed"
+                if not items:
+                    status = "failed"
+                    warning = "Semantic Scholar returned no usable evidence."
+                elif self.api_key is None:
+                    status = "degraded"
+                    warning = (
+                        "Anonymous Semantic Scholar access returned usable evidence, "
+                        "but no API key is configured; shared rate limits may reduce reliability."
+                    )
+                    if attempts > 1:
+                        warning += (
+                            " The successful response required bounded retry after an "
+                            "earlier limited attempt."
+                        )
+                elif attempts > 1:
+                    status = "degraded"
+                    warning = (
+                        "Semantic Scholar API-key access returned usable evidence after "
+                        "one or more limited attempts."
+                    )
+                else:
+                    status = "success"
+                    warning = None
                 result = SourceResult(
                     name="semantic_scholar",
                     status=status,
                     attempts=attempts,
                     routes=tuple(routes),
                     result_count=len(items),
-                    warning=None if items else "Semantic Scholar returned no usable evidence.",
+                    warning=warning,
                     items=tuple(items),
                 )
                 self._cache[cache_key] = result
@@ -457,7 +479,7 @@ class SemanticScholarClient:
             )
             self.sleep(delay)
 
-        status = "degraded" if fallback_available else "failed"
+        status = "failed"
         if last_status == 429:
             detail = "rate limited after bounded retries"
         elif last_status is not None:
@@ -467,7 +489,7 @@ class SemanticScholarClient:
         mode = "API-key" if self.api_key is not None else "anonymous"
         warning = f"Semantic Scholar {mode} access {detail}."
         if fallback_available:
-            warning += " Other sources supplied usable evidence."
+            warning += " Other sources may still provide run-level coverage."
         result = SourceResult(
             name="semantic_scholar",
             status=status,

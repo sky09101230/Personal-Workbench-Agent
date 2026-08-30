@@ -44,8 +44,10 @@ The helper emits machine-readable JSON, loads the optional Semantic Scholar key 
 - Normalize and deduplicate equivalent `(query, limit, fallback mode)` requests within one helper process.
 - On `429` or transient `5xx`, honor `Retry-After` when present, capped at 30 seconds.
 - Without `Retry-After`, use bounded exponential backoff of 1 then 2 seconds for three total attempts.
-- A later successful response is source-level `success`; earlier `429` attempts remain route diagnostics only.
-- Exhausted anonymous or keyed attempts are `degraded` only when another source supplied usable fallback evidence; otherwise they are `failed`.
+- Anonymous access is always source-level `degraded` when it returns usable evidence, even when `graph_api=success`; the warning must state that no API key is configured and shared rate limits may reduce reliability.
+- API-key access is source-level `success` only when the keyed request succeeds without earlier limited attempts.
+- API-key access that returns usable evidence after a `429`, transient failure, or bounded retry is `degraded`; the successful Graph API route remains recorded.
+- Anonymous or keyed access with no usable evidence is always `failed`, even when other sources provide run-level coverage.
 
 ## Success threshold for the run
 
