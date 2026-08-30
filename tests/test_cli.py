@@ -371,3 +371,101 @@ def test_literature_validation_error_has_no_traceback(
     error = capsys.readouterr().err  # type: ignore[attr-defined]
     assert "validator rejected result" in error
     assert "Traceback" not in error
+
+
+def test_parser_has_nested_literature_run_command() -> None:
+    args = build_parser().parse_args(["literature", "run", "d2nn", "--ingest"])
+
+    assert args.command == "literature"
+    assert args.literature_command == "run"
+    assert args.profile_key == "d2nn"
+    assert args.ingest is True
+
+
+def test_literature_run_cli_reports_counts_sources_and_ingest(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeRunService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            captured["kwargs"] = kwargs
+
+        def run(self, profile_key: str, *, ingest: bool) -> SimpleNamespace:
+            captured["profile_key"] = profile_key
+            captured["ingest"] = ingest
+            return SimpleNamespace(
+                profile_key="d2nn",
+                output_directory=tmp_path / "research_outputs" / "run",
+                result_path=tmp_path / "research_outputs" / "run" / "result.json",
+                report_path=tmp_path / "research_outputs" / "run" / "report.md",
+                log_path=tmp_path / "logs" / "literature-radar" / "run.json",
+                candidate_count=30,
+                verified_count=9,
+                recommended_count=5,
+                source_status=(
+                    {"name": "openalex", "status": "success"},
+                    {"name": "semantic_scholar", "status": "degraded"},
+                ),
+                ingest_response={
+                    "run_id": "research-run:automation",
+                    "created_run": False,
+                },
+            )
+
+    config_path = write_config(tmp_path, tmp_path)
+    (tmp_path / ".env").write_text("MISSING_TOKEN=secret\n", encoding="utf-8")
+    monkeypatch.delenv("MISSING_TOKEN", raising=False)
+    monkeypatch.setattr("workbench_agent.cli.LiteratureRunService", FakeRunService)
+
+    result = main(
+        [
+            "--config",
+            str(config_path),
+            "literature",
+            "run",
+            "d2nn",
+            "--ingest",
+        ]
+    )
+
+    assert result == 0
+    assert captured["profile_key"] == "d2nn"
+    assert captured["ingest"] is True
+    output = capsys.readouterr().out  # type: ignore[attr-defined]
+    assert "Literature Radar run completed" in output
+    assert "Candidates: 30" in output
+    assert "Verified: 9" in output
+    assert "Recommended: 5" in output
+    assert "openalex: success" in output
+    assert "semantic_scholar: degraded" in output
+    assert "research-run:automation" in output
+    assert "Run identity: existing" in output
+
+
+def test_literature_run_cli_error_has_no_traceback(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingRunService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def run(self, profile_key: str, *, ingest: bool) -> object:
+            raise LiteratureRadarValidationError("automation validator rejected result")
+
+    config_path = write_config(tmp_path, tmp_path)
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    monkeypatch.setattr("workbench_agent.cli.LiteratureRunService", FailingRunService)
+
+    result = main(
+        ["--config", str(config_path), "literature", "run", "d2nn"]
+    )
+
+    assert result == 2
+    error = capsys.readouterr().err  # type: ignore[attr-defined]
+    assert "automation validator rejected result" in error
+    assert "Traceback" not in error

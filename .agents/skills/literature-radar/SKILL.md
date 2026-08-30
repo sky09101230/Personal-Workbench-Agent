@@ -49,6 +49,10 @@ The helper implements this exact order without `shell=True` or PowerShell aliase
 
 Use the helper rather than invoking the CLI through a PowerShell alias. All machine-readable Zotero calls use `--json`, raw-byte UTF-8 decoding, strict envelope validation, and safe diagnostics. `batch-search` isolates a failed query and returns `degraded: true` when other queries succeed. Use only read operations such as `search`, `get metadata`, `get recent`, `get collections`, and optional semantic database status/search. Semantic search may enrich context but must not block V0.
 
+### Orchestrated automation context
+
+When `workbench-agent literature run` explicitly provides an absolute `zotero-context.json` path, the Agent orchestrator has already run this same repository helper outside the nested Codex sandbox, immediately before research. Validate `schema_version`, profile, backend, status, query coverage, anchor count, and item fields, then use that file as the read-only Zotero Library Context for duplicate and novelty screening. Do not invoke `zotero-cli` again in that nested automation run. If the snapshot is missing, malformed, has no anchors, or has materially insufficient successful queries, stop before external discovery and artifacts. This exception applies only to an orchestrator-generated snapshot for the current run; interactive one-off Skill use continues to execute the helper directly.
+
 ## Required workflow
 
 1. **Load and validate the profile.** Confirm `schema_version == 1`, required arrays are non-empty, `zotero.backend` is supported, `lookback_days`, candidate/result limits are positive, and ranking weights sum to 1. Map `ranking.novelty_to_zotero` to the output score named `novelty`.
