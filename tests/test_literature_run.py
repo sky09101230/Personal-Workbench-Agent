@@ -316,6 +316,7 @@ def test_orchestration_runs_preflight_codex_validator_and_ingest(
     assert "executable" not in context
     assert str(context_path) in runner.instruction
     assert "Do not rerun zotero-cli" in runner.instruction
+    assert "actually contains U+FFFD" in runner.instruction
     assert client.health_calls == 1
     assert len(client.ingest_calls) == 1
     assert result.candidate_count == 4
@@ -624,3 +625,61 @@ def test_codex_auth_accepts_healthy_non_openai_provider(
     CodexLiteratureRunner().check_authentication()
 
     assert calls == 2
+
+
+def test_codex_runner_injects_system_proxy_without_command_or_diagnostic_leak(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    proxy = "http://proxy-user:proxy-secret@127.0.0.1:7890"
+    monkeypatch.setattr(literature_run, "_resolve_executable", lambda value: "codex.cmd")
+    monkeypatch.setattr(
+        literature_run,
+        "getproxies",
+        lambda: {"http": proxy, "https": proxy, "ftp": "http://ignored"},
+    )
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        environment = kwargs["env"]
+        assert isinstance(environment, dict)
+        assert environment["HTTP_PROXY"] == proxy
+        assert environment["HTTPS_PROXY"] == proxy
+        assert environment["http_proxy"] == proxy
+        assert environment["https_proxy"] == proxy
+        assert proxy not in " ".join(command)
+        assert proxy not in str(kwargs.get("input", ""))
+        diagnostic = Path(command[command.index("--output-last-message") + 1])
+        diagnostic.write_text(
+            f"HTTP_PROXY={proxy}\nproxy route {proxy}\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    CodexLiteratureRunner().run("use repository sources", workdir=tmp_path)
+
+    diagnostic = (tmp_path / "codex-last-message.txt").read_text(encoding="utf-8")
+    assert proxy not in diagnostic
+    assert "proxy-secret" not in diagnostic
+    assert "HTTP_PROXY" not in diagnostic
+
+
+def test_system_proxy_values_ignore_unrelated_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        literature_run,
+        "getproxies",
+        lambda: {
+            "http": "http://127.0.0.1:7890",
+            "https": "http://127.0.0.1:7890",
+            "ftp": "http://127.0.0.1:7891",
+            "no": "localhost",
+        },
+    )
+
+    assert literature_run._system_proxy_values() == {
+        "http": "http://127.0.0.1:7890",
+        "https": "http://127.0.0.1:7890",
+    }

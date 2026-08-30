@@ -13,6 +13,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import ModuleType
 from typing import Callable, Mapping, Protocol
+from urllib.request import getproxies
 
 from .client import WorkbenchClient
 from .config import AgentConfig, load_config, load_env_file, load_token, project_root
@@ -33,7 +34,12 @@ from .research.codex_runner import _resolve_executable, _safe_diagnostic
 
 UTC = timezone.utc
 DEFAULT_LOCK_STALE_AFTER = timedelta(hours=24)
-SENSITIVE_NAMES = ("WORKBENCH_AGENT_TOKEN", "SEMANTIC_SCHOLAR_API_KEY")
+SENSITIVE_NAMES = (
+    "WORKBENCH_AGENT_TOKEN",
+    "SEMANTIC_SCHOLAR_API_KEY",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+)
 
 
 class LiteratureCodexRunner(Protocol):
@@ -102,7 +108,12 @@ class CodexLiteratureRunner:
             str(diagnostic_path),
             "-",
         ]
-        completed = self._run_process(command, input_text=instruction, timeout=self.timeout)
+        completed = self._run_process(
+            command,
+            input_text=instruction,
+            timeout=self.timeout,
+            env=_codex_environment(),
+        )
         self._sanitize_diagnostic(diagnostic_path)
         if completed.returncode != 0:
             detail = _safe_diagnostic(completed.stderr or completed.stdout)
@@ -126,6 +137,7 @@ class CodexLiteratureRunner:
             for secret in (
                 os.environ.get("WORKBENCH_AGENT_TOKEN", ""),
                 os.environ.get("SEMANTIC_SCHOLAR_API_KEY", ""),
+                *_system_proxy_values().values(),
             )
             if secret
         )
@@ -140,6 +152,7 @@ class CodexLiteratureRunner:
         *,
         timeout: float,
         input_text: str | None = None,
+        env: Mapping[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         try:
             return subprocess.run(
@@ -150,6 +163,7 @@ class CodexLiteratureRunner:
                 capture_output=True,
                 timeout=timeout,
                 check=False,
+                env=dict(env) if env is not None else None,
             )
         except FileNotFoundError as exc:
             raise CodexLiteratureExecutionError(
@@ -460,7 +474,15 @@ class LiteratureRunService:
         started_at = self._now()
         token = os.environ.get(self.config.server.token_env, "")
         semantic_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
-        secrets = tuple(value for value in (token, semantic_key) if value)
+        secrets = tuple(
+            value
+            for value in (
+                token,
+                semantic_key,
+                *_system_proxy_values().values(),
+            )
+            if value
+        )
         log_path = self._new_log_path(profile_key, started_at)
         run_log = _RunLog(
             log_path,
@@ -771,6 +793,7 @@ Required constraints:
 - Do not modify Zotero, the research profile, repository code, or Git.
 - Do not commit or push anything.
 - Preserve truthful degraded/failed source status and never fabricate evidence.
+- Report a Unicode replacement-character warning only if parsed `zotero-context.json` actually contains U+FFFD; identify the exact item key and field instead of inferring corruption from terminal rendering.
 
 Codex is responsible only for the research artifacts. The Agent orchestrator will validate again and perform transport after this command exits.
 """
@@ -980,6 +1003,29 @@ def _source_status(raw: object) -> list[dict[str, object]]:
             }
         )
     return safe
+
+
+def _system_proxy_values() -> dict[str, str]:
+    try:
+        proxies = getproxies()
+    except OSError:
+        return {}
+    values: dict[str, str] = {}
+    for scheme in ("http", "https"):
+        value = proxies.get(scheme)
+        if isinstance(value, str) and value.strip():
+            values[scheme] = value.strip()
+    return values
+
+
+def _codex_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    for scheme, value in _system_proxy_values().items():
+        upper = f"{scheme.upper()}_PROXY"
+        lower = f"{scheme.lower()}_proxy"
+        environment[upper] = value
+        environment[lower] = value
+    return environment
 
 
 def _recovery_command(result_path: Path) -> str:

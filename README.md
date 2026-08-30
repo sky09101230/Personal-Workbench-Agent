@@ -248,7 +248,7 @@ workbench-agent literature run d2nn --ingest
 
 命令在启动长时间研究前依次检查项目 `config.json`、相邻 `.env`、Workbench token 与 `/api/health`、Research Profile、Codex 可执行文件与当前 provider 认证状态、`zotero-cli` 可执行文件、Zotero config 和全部 profile query 的只读 batch search。任一 required preflight 失败都会在 Codex research 和 ingest 前退出非零。
 
-Agent 预留本轮唯一 `research_outputs/<UTC timestamp>/`，把经过 allowlist 清理的 `zotero-context.json` 只读快照以及 `result.json` / `report.md` 的精确路径交给 Codex，并明确要求使用仓库 `$literature-radar` Skill。Codex 只做 research；Agent 负责再次运行现有 validator、复用现有 schema v2 ingest mapping，并通过 Workbench HTTP API transport。`--ingest` 省略时仍运行并验证 Radar，但不进行 Workbench 写入。
+Agent 预留本轮唯一 `research_outputs/<UTC timestamp>/`，把经过 allowlist 清理的 `zotero-context.json` 只读快照以及 `result.json` / `report.md` 的精确路径交给 Codex，并明确要求使用仓库 `$literature-radar` Skill。Codex 只做 research；Agent 负责再次运行现有 validator、复用现有 schema v2 ingest mapping，并通过 Workbench HTTP API transport。启动 nested Codex research 时，Agent 会通过 Python `urllib.request.getproxies()` 读取当前 Windows HTTP/HTTPS system proxy，并只通过子进程环境传入对应 proxy 变量；proxy URL 不进入 prompt、命令行、日志或诊断文件。`--ingest` 省略时仍运行并验证 Radar，但不进行 Workbench 写入。
 
 同一时刻只允许一个 `literature run`。本地 lock 位于被 Git 忽略的 `logs/literature-radar/`，24 小时以上的 stale lock 会安全回收；已有 artifact 的 `literature ingest` 不受此 lock 限制。每轮安全 JSON 日志记录 preflight、Codex/validator 状态、candidate/verified/recommended 数量、source status 与 ingest run id，不记录 token、API key、Authorization/request headers 或 Zotero attachment path。
 
