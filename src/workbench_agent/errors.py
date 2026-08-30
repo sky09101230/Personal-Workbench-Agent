@@ -36,3 +36,15 @@ class ResearchResultValidationError(AgentError):
 
 class LiteratureRadarValidationError(AgentError):
     """A Literature Radar result/report pair failed validation or mapping."""
+
+
+class LiteratureRadarRunError(AgentError):
+    """An orchestrated Literature Radar run could not complete."""
+
+
+class LiteratureRadarPreflightError(LiteratureRadarRunError):
+    """A required check failed before Literature Radar research started."""
+
+
+class LiteratureRadarLockError(LiteratureRadarRunError):
+    """Another Literature Radar research execution owns the local lock."""

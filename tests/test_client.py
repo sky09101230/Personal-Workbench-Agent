@@ -147,3 +147,29 @@ def test_connection_and_timeout_raise_connection_error(error_type: type[Exceptio
     ) as client:
         with pytest.raises(WorkbenchConnectionError):
             client.health()
+
+
+def test_api_error_includes_safe_structured_detail() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            409,
+            json={
+                "detail": {
+                    "code": "paper_research_identity_conflict",
+                    "message": (
+                        "Incoming arXiv id conflicts; "
+                        "Authorization: Bearer hidden-token"
+                    ),
+                }
+            },
+        )
+    )
+    with WorkbenchClient("http://server", "token", transport=transport) as client:
+        with pytest.raises(WorkbenchApiError) as error:
+            client.health()
+
+    message = str(error.value)
+    assert "paper_research_identity_conflict" in message
+    assert "Incoming arXiv id conflicts" in message
+    assert "Authorization" not in message
+    assert "hidden-token" not in message

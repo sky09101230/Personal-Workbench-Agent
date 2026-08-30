@@ -18,6 +18,7 @@ from .config import (
 )
 from .errors import AgentError
 from .literature import LiteratureIngestService
+from .literature_run import LiteratureRunResult, LiteratureRunService
 from .research.codex_runner import CodexResearchRunner
 from .research.models import ResearchResult
 from .research.service import ResearchService
@@ -57,11 +58,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     literature = commands.add_parser(
         "literature",
-        help="Validate and manually ingest Literature Radar outputs",
+        help="Run or ingest Literature Radar outputs",
     )
     literature_commands = literature.add_subparsers(
         dest="literature_command",
         required=True,
+    )
+    literature_run = literature_commands.add_parser(
+        "run",
+        help="Run one repository Literature Radar profile",
+    )
+    literature_run.add_argument("profile_key", help="Research profile key")
+    literature_run.add_argument(
+        "--ingest",
+        action="store_true",
+        help="Upload the validated artifacts to Workbench",
     )
     literature_ingest = literature_commands.add_parser(
         "ingest",
@@ -167,12 +178,33 @@ def _print_literature_ingest(
     print(f"Created recommendations: {response.get('created_recommendations')}")
 
 
+def _print_literature_run(result: LiteratureRunResult) -> None:
+    print("Literature Radar run completed")
+    print(f"\nProfile: {result.profile_key}")
+    print(f"Output: {result.output_directory}")
+    print(f"Candidates: {result.candidate_count}")
+    print(f"Verified: {result.verified_count}")
+    print(f"Recommended: {result.recommended_count}")
+    print("Sources:")
+    for source in result.source_status:
+        print(f"  {source.get('name')}: {source.get('status')}")
+    if result.ingest_response is None:
+        print("\nWorkbench ingest: skipped")
+    else:
+        created = result.ingest_response.get("created_run") is True
+        print("\nWorkbench ingest: accepted")
+        print(f"Run: {result.ingest_response.get('run_id')}")
+        print(f"Run identity: {'created' if created else 'existing'}")
+    print(f"Log: {result.log_path}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        load_env_file(default_env_path(args.config))
+        env_path = default_env_path(args.config)
+        load_env_file(env_path)
         config = load_config(args.config)
-        if args.command == "literature":
+        if args.command == "literature" and args.literature_command == "ingest":
             token = None if args.dry_run else load_token(config)
             with WorkbenchClient(config.server.url, token) as client:
                 payload, response, validation = LiteratureIngestService(client).ingest(
@@ -186,6 +218,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 validation,
                 dry_run=args.dry_run,
             )
+            return 0
+        if args.command == "literature" and args.literature_command == "run":
+            token = load_token(config) if args.ingest else None
+            with WorkbenchClient(config.server.url, token) as client:
+                result = LiteratureRunService(
+                    config,
+                    client,
+                    config_path=args.config,
+                    env_path=env_path,
+                ).run(args.profile_key, ingest=args.ingest)
+            _print_literature_run(result)
             return 0
         if args.command == "research":
             token = None if args.dry_run else load_token(config)

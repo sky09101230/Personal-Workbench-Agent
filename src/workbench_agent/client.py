@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Mapping
 
 import httpx
@@ -111,8 +112,10 @@ class WorkbenchClient:
                 f"Workbench authentication failed ({response.status_code})"
             )
         if not response.is_success:
+            detail = _safe_response_detail(response)
+            suffix = f": {detail}" if detail else ""
             raise WorkbenchApiError(
-                f"Workbench API returned {response.status_code} for {method} /{path}"
+                f"Workbench API returned {response.status_code} for {method} /{path}{suffix}"
             )
         try:
             data = response.json()
@@ -121,3 +124,30 @@ class WorkbenchClient:
         if not isinstance(data, dict):
             raise WorkbenchApiError("Workbench API response must be a JSON object")
         return data
+
+def _safe_response_detail(response: httpx.Response, limit: int = 500) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return ""
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    parts: list[str] = []
+    if isinstance(detail, str):
+        parts.append(detail)
+    elif isinstance(detail, dict):
+        for key in ("code", "message"):
+            value = detail.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(value.strip())
+    text = ": ".join(parts)[-limit:]
+    text = re.sub(
+        r"(?i)authorization\s*[:=]\s*bearer\s+\S+",
+        "[REDACTED_HEADER]",
+        text,
+    )
+    text = re.sub(
+        r"(?i)[A-Z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD)[A-Z0-9_]*\s*[:=]\s*\S+",
+        "[REDACTED]",
+        text,
+    )
+    return " ".join(text.splitlines())
