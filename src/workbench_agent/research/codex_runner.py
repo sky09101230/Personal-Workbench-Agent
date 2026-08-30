@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -10,9 +12,32 @@ from typing import Mapping
 from ..errors import CodexExecutionError
 
 
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _resolve_executable(executable: str) -> str:
+    resolved = shutil.which(executable)
+    if resolved is not None:
+        return resolved
+
+    path = Path(executable).expanduser()
+    if _is_windows() and not path.suffix:
+        for suffix in (".cmd", ".exe"):
+            resolved = shutil.which(f"{executable}{suffix}")
+            if resolved is not None:
+                return resolved
+
+    if path.is_absolute() and path.is_file():
+        if _is_windows() or os.access(path, os.X_OK):
+            return str(path)
+
+    raise CodexExecutionError(f"Codex executable was not found: {executable}")
+
+
 class CodexResearchRunner:
     def __init__(self, executable: str = "codex", *, timeout: float = 900.0) -> None:
-        self.executable = executable
+        self.executable = _resolve_executable(executable)
         self.timeout = timeout
 
     def require_mcp(self, name: str) -> None:

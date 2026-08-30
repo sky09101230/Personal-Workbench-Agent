@@ -39,6 +39,8 @@ Paper Research Worker v0.1 支持：
 
 Agent 不扫描 Git、`runs/`、输出或 checkpoint，不保存第二份论文数据库，不自动创建 ActivityEvent，也不提供 watcher、scheduler、daemon 或 Windows Service。
 
+仓库还包含一个与 Agent/Workbench 完全解耦的项目级 Codex Skill：**Literature Radar V0**。它读取长期 Research Profile，并用只读 zotero-cli 文献库上下文和外部学术检索生成本地推荐文件；它不会调用 ResearchTask、不会写入 Zotero、也不会上传 Workbench。
+
 ## 安装
 
 需要 Python 3.10 或更高版本。
@@ -134,7 +136,37 @@ ResearchTask 与主配置分离，默认目录为：
 
 仓库中的 `research_tasks/d2nn-recent-papers.json` 是首个任务，可以直接作为默认任务使用；topic、keywords、排除偏好、回溯天数和结果数量均由该 JSON 管理，不硬编码在 Python 中。
 
-Codex CLI 必须预先完成登录，并配置可访问的 Zotero MCP。Research prompt 要求先查询最少量的相关 Zotero 上下文，再执行外部检索；Zotero 不可用时不得悄悄声称已使用。
+现有 Paper Research Worker 仍要求 Codex CLI 登录和 Zotero MCP；独立 Literature Radar V0 不调用该 Worker，并默认通过 zotero-cli 读取个人文献库。
+
+## Literature Radar Skill
+
+项目级 Skill 位于：
+
+```text
+.agents/skills/literature-radar/
+```
+
+默认长期兴趣配置位于：
+
+```text
+research_profiles/d2nn.json
+```
+
+在 Codex 中运行：
+
+```text
+$literature-radar
+
+使用 research_profiles/d2nn.json。
+通过 zotero-cli 读取 Zotero（只读）。
+运行一次 Literature Radar。
+最多推荐 5 篇。
+不要修改 Zotero。
+不要上传 Workbench。
+把结果保存到 research_outputs/<timestamp>/。
+```
+
+Skill 会自动按 PATH → Windows `zotero-cli.exe` → `uv tool dir --bin` 的顺序定位可执行文件，并先执行只读 config preflight。V0.1 helper 强制子进程 UTF-8、严格解析 JSON envelope、用 batch search 隔离单个 library query 失败，并提供 paper identity merge 与 result/report validator。外部来源按 success / degraded / failed / not_attempted 记录；在线发表、预印本和 issue/print 日期分别核验。成功运行会生成 `result.json` 和 `report.md`。`research_outputs/` 已被 Git 忽略。这个 Skill 不调用 `workbench-agent research run`，也不复用或修改现有 Paper Research Worker。
 
 ## 使用
 
