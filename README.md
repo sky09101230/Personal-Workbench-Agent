@@ -169,6 +169,15 @@ $literature-radar
 
 Skill 会自动按 PATH → Windows `zotero-cli.exe` → `uv tool dir --bin` 的顺序定位可执行文件，并先执行只读 config preflight。V0.1 helper 强制子进程 UTF-8、严格解析 JSON envelope、用 batch search 隔离单个 library query 失败，并提供 paper identity merge 与 result/report validator。外部来源按 success / degraded / failed / not_attempted 记录；在线发表、预印本和 issue/print 日期分别核验。成功运行会生成 `result.json` 和 `report.md`。`research_outputs/` 已被 Git 忽略。这个 Skill 不调用 `workbench-agent research run`，也不复用或修改现有 Paper Research Worker；只有后续显式的 `workbench-agent literature ingest` 才会通过 HTTP 写入 Workbench。
 
+外部源 helper：
+
+```powershell
+python .agents\skills\literature-radar\scripts\academic_sources.py probe `
+  --query "diffractive optical neural network"
+```
+
+arXiv Python HTTPS 固定使用 `certifi` CA，并在 Atom 发现后验证官方 arXiv 页面；底层默认 CA 异常只作为 route diagnostic。Semantic Scholar 可从根目录 `.env` 读取可选 `SEMANTIC_SCHOLAR_API_KEY`，仅通过 `x-api-key` header 发送，默认约 1 request/second，并支持 Retry-After、bounded exponential backoff 和 query dedup。helper 输出不包含 key 或请求 header。
+
 ## 使用
 
 ### doctor

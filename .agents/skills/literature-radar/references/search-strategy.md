@@ -36,7 +36,7 @@ Treat exclusions semantically. `on-chip photonics` and `silicon photonics` shoul
 | DOI/Crossref | DOI metadata reconciliation | authoritative metadata, not always full evidence |
 | Publisher/proceedings page | canonical publication status and article metadata | primary |
 
-Do not force a source to appear in `sources_used` merely because it is listed in the profile. Record every requested source with `success`, `degraded`, `failed`, or `not_attempted`. Anonymous optional APIs use at most two attempts and bounded backoff as defined in `source-degradation.md`. Continue after an optional failure only when other sources provide adequate discovery and primary evidence.
+Do not force a source to appear in `sources_used` merely because it is listed in the profile. Record every requested source with `success`, `degraded`, `failed`, or `not_attempted` using the final-evidence semantics in `source-degradation.md`. Use `scripts/academic_sources.py` for arXiv and Semantic Scholar so certifi TLS, optional API-key authentication, one-request-per-second pacing, Retry-After handling, bounded backoff, and request dedup are consistent. Continue after an optional failure only when other sources provide adequate discovery and primary evidence.
 
 ## 4. Candidate bookkeeping
 

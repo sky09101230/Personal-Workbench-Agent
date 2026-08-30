@@ -36,6 +36,9 @@ def test_skill_is_project_discoverable_and_complete() -> None:
     assert (SKILL / "scripts" / "zotero_cli.py").is_file()
     assert (SKILL / "scripts" / "paper_identity.py").is_file()
     assert (SKILL / "scripts" / "validate_output.py").is_file()
+    assert (SKILL / "scripts" / "academic_sources.py").is_file()
+    assert "academic_sources.py" in skill_text
+    assert "SEMANTIC_SCHOLAR_API_KEY" in skill_text
 
 
 def test_d2nn_profile_contract() -> None:

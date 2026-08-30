@@ -55,7 +55,7 @@ Use the helper rather than invoking the CLI through a PowerShell alias. All mach
 2. **Preflight Zotero first.** For backend `cli`, resolve the executable and run `zotero-cli config` through the helper. Then perform a bounded JSON search to confirm the configured local/web library is readable. If either step fails, stop.
 3. **Build Zotero Library Context.** Run the profile-derived searches through `batch-search`, normally with 10 results per query. Continue after an isolated query failure, mark the context degraded, and stop only when successful queries do not provide adequate duplicate/novelty coverage. Deduplicate anchors by DOI → arXiv ID → canonical title → title+year. Inspect detailed metadata only for important anchors. Do not traverse the full library or bulk-read PDFs.
 4. **Plan external queries.** Read [references/search-strategy.md](references/search-strategy.md), [references/source-degradation.md](references/source-degradation.md), and [references/metadata-policy.md](references/metadata-policy.md). Expand concepts, abbreviations, neighboring terms, tasks, and anchor-paper vocabulary from the profile plus Zotero context. Keep the scope centered on the profile and honor exclusions semantically.
-5. **Discover candidates.** Search the requested source families using available Codex web/search capabilities. Treat arXiv, OpenAlex, and Semantic Scholar as discovery/metadata sources; prefer arXiv abstract pages, DOI/publisher pages, and official proceedings pages as primary evidence. Keep at most `search.max_candidates` unique works after identity merging.
+5. **Discover candidates.** For arXiv and Semantic Scholar, use `scripts/academic_sources.py` before ad-hoc web search so verified certifi TLS, official arXiv evidence, optional `SEMANTIC_SCHOLAR_API_KEY`, one-request-per-second pacing, Retry-After/backoff, and query dedup are enforced. The helper loads the Agent root `.env` but never emits the key. Use available Codex web/search capabilities for OpenAlex, publisher, Crossref, and follow-up verification. Treat arXiv, OpenAlex, and Semantic Scholar as discovery/metadata sources; prefer arXiv abstract pages, DOI/publisher pages, and official proceedings pages as primary evidence. Keep at most `search.max_candidates` unique works after identity merging.
 6. **Normalize and verify identity.** Use `scripts/paper_identity.py` or the same deterministic rules to merge versions in DOI → versionless arXiv ID → canonical title → title+year order. Verify title, authors, date/year, publication status, and at least one reliable identifier or primary URL. A preprint and its journal/conference version are one work unless they contain a materially distinct contribution.
 7. **Screen against Zotero.** Read [references/screening.md](references/screening.md). Every candidate must be checked against Library Context. Papers already present are excluded by default, except a clearly important new formal version or major revision; document any exception.
 8. **Read enough primary evidence.** For serious finalists, inspect the abstract and the most relevant accessible method, result, discussion, and limitation material. Prefer full text when accessible, but do not invent details when only an abstract is available. Record evidence depth and make claims no stronger than the material read.
@@ -134,6 +134,15 @@ Each recommendation must include at least:
 ```
 
 Use `null` for an unknown DOI or arXiv ID; never invent one. `related_papers` may be empty. Do not name a related Zotero paper unless a real CLI result established that it exists.
+
+For a minimal real source probe:
+
+```powershell
+python .agents\skills\literature-radar\scripts\academic_sources.py probe `
+  --query "diffractive optical neural network"
+```
+
+Copy only the helper's safe `name/status/attempts/routes/result_count/warning` fields into `search.source_status`; never copy API keys or request headers.
 
 ## Report contract
 
