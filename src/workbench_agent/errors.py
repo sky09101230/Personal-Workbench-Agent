@@ -32,3 +32,7 @@ class CodexExecutionError(AgentError):
 
 class ResearchResultValidationError(AgentError):
     """A Codex research result does not satisfy ingest schema v1."""
+
+
+class LiteratureRadarValidationError(AgentError):
+    """A Literature Radar result/report pair failed validation or mapping."""
