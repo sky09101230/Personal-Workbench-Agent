@@ -17,6 +17,7 @@ from .config import (
     load_token,
 )
 from .errors import AgentError
+from .literature import LiteratureIngestService
 from .research.codex_runner import CodexResearchRunner
 from .research.models import ResearchResult
 from .research.service import ResearchService
@@ -53,6 +54,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Research and validate without writing to Workbench",
+    )
+    literature = commands.add_parser(
+        "literature",
+        help="Validate and manually ingest Literature Radar outputs",
+    )
+    literature_commands = literature.add_subparsers(
+        dest="literature_command",
+        required=True,
+    )
+    literature_ingest = literature_commands.add_parser(
+        "ingest",
+        help="Validate and upload one Literature Radar result.json",
+    )
+    literature_ingest.add_argument("result", type=Path, help="Radar result.json path")
+    literature_ingest.add_argument(
+        "--report",
+        type=Path,
+        help="Radar report.md path (default: sibling report.md)",
+    )
+    literature_ingest.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and map without writing to Workbench",
     )
     return parser
 
@@ -115,11 +139,54 @@ def _print_research(result: ResearchResult, *, dry_run: bool) -> None:
         print("\nWorkbench ingest accepted")
 
 
+def _print_literature_ingest(
+    payload: dict[str, object],
+    response: dict[str, object] | None,
+    validation: dict[str, object],
+    *,
+    dry_run: bool,
+) -> None:
+    papers = payload.get("papers")
+    recommended = payload.get("recommended_count")
+    verified = payload.get("verified_candidate_count")
+    print("Literature Radar validation passed")
+    print(f"\nIngest identity: {payload.get('ingest_identity')}")
+    print(f"Candidates: {payload.get('candidate_count')}")
+    print(f"Verified: {verified}")
+    print(f"Recommended: {recommended}")
+    print(f"Mapped papers: {len(papers) if isinstance(papers, list) else 0}")
+    print(f"Sources checked: {validation.get('source_count')}")
+    if dry_run:
+        print("\nDry run: no Workbench write")
+        return
+    assert response is not None
+    print("\nWorkbench ingest accepted")
+    print(f"Run: {response.get('run_id')}")
+    print(f"Created run: {response.get('created_run')}")
+    print(f"Created papers: {response.get('created_papers')}")
+    print(f"Created recommendations: {response.get('created_recommendations')}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         load_env_file(default_env_path(args.config))
         config = load_config(args.config)
+        if args.command == "literature":
+            token = None if args.dry_run else load_token(config)
+            with WorkbenchClient(config.server.url, token) as client:
+                payload, response, validation = LiteratureIngestService(client).ingest(
+                    args.result,
+                    report_path=args.report,
+                    dry_run=args.dry_run,
+                )
+            _print_literature_ingest(
+                payload,
+                response,
+                validation,
+                dry_run=args.dry_run,
+            )
+            return 0
         if args.command == "research":
             token = None if args.dry_run else load_token(config)
             with WorkbenchClient(config.server.url, token) as client:

@@ -35,11 +35,12 @@ Paper Research Worker v0.1 支持：
 - Codex CLI 原生 JSON Schema structured output；
 - Agent 侧 ingest schema v1 验证；
 - `research run` 与真实研究但不写 Workbench 的 `--dry-run`；
-- 复用现有 Bearer HTTP client 写入 Workbench。
+- 复用现有 Bearer HTTP client 写入 Workbench；
+- `literature ingest` 对已有 Literature Radar result/report 先运行 V0.1 output validator，再手动上传 Workbench schema v2。
 
 Agent 不扫描 Git、`runs/`、输出或 checkpoint，不保存第二份论文数据库，不自动创建 ActivityEvent，也不提供 watcher、scheduler、daemon 或 Windows Service。
 
-仓库还包含一个与 Agent/Workbench 完全解耦的项目级 Codex Skill：**Literature Radar V0**。它读取长期 Research Profile，并用只读 zotero-cli 文献库上下文和外部学术检索生成本地推荐文件；它不会调用 ResearchTask、不会写入 Zotero、也不会上传 Workbench。
+仓库还包含一个与 Research Worker/Workbench 搜索能力完全解耦的项目级 Codex Skill：**Literature Radar V0**。它读取长期 Research Profile，并用只读 zotero-cli 文献库上下文和外部学术检索生成本地推荐文件；Skill 本身不会调用 ResearchTask、不会写入 Zotero、也不会上传 Workbench。V0.2 仅由用户显式执行 Agent 手动 ingest 命令传输已经验证的文件。
 
 ## 安装
 
@@ -166,7 +167,16 @@ $literature-radar
 把结果保存到 research_outputs/<timestamp>/。
 ```
 
-Skill 会自动按 PATH → Windows `zotero-cli.exe` → `uv tool dir --bin` 的顺序定位可执行文件，并先执行只读 config preflight。V0.1 helper 强制子进程 UTF-8、严格解析 JSON envelope、用 batch search 隔离单个 library query 失败，并提供 paper identity merge 与 result/report validator。外部来源按 success / degraded / failed / not_attempted 记录；在线发表、预印本和 issue/print 日期分别核验。成功运行会生成 `result.json` 和 `report.md`。`research_outputs/` 已被 Git 忽略。这个 Skill 不调用 `workbench-agent research run`，也不复用或修改现有 Paper Research Worker。
+Skill 会自动按 PATH → Windows `zotero-cli.exe` → `uv tool dir --bin` 的顺序定位可执行文件，并先执行只读 config preflight。V0.1 helper 强制子进程 UTF-8、严格解析 JSON envelope、用 batch search 隔离单个 library query 失败，并提供 paper identity merge 与 result/report validator。外部来源按 success / degraded / failed / not_attempted 记录；在线发表、预印本和 issue/print 日期分别核验。成功运行会生成 `result.json` 和 `report.md`。`research_outputs/` 已被 Git 忽略。这个 Skill 不调用 `workbench-agent research run`，也不复用或修改现有 Paper Research Worker；只有后续显式的 `workbench-agent literature ingest` 才会通过 HTTP 写入 Workbench。
+
+外部源 helper：
+
+```powershell
+python .agents\skills\literature-radar\scripts\academic_sources.py probe `
+  --query "diffractive optical neural network"
+```
+
+arXiv Python HTTPS 固定使用 `certifi` CA，并在 Atom 发现后验证官方 arXiv 页面；底层默认 CA 异常只作为 route diagnostic。Semantic Scholar 可从根目录 `.env` 读取可选 `SEMANTIC_SCHOLAR_API_KEY`，仅通过 `x-api-key` header 发送，默认约 1 request/second，并支持 Retry-After、bounded exponential backoff 和 query dedup。匿名模式即使获得 evidence 也固定标记为 `degraded`，用于明确共享限流风险；只有无前置受限尝试的 keyed success 才标记 `success`。helper 输出不包含 key 或请求 header。
 
 ## 使用
 
@@ -227,6 +237,27 @@ workbench-agent research run d2nn-recent-papers
 ```
 
 每次新执行会生成唯一 `run_key`；同一次执行只在验证成功后 POST。Codex 输出必须通过 Agent 侧 schema v1、task key、时区、论文数量、分数、URL/标识符等验证，不能直接转发。
+
+### literature ingest
+
+验证并预览映射，不发送 HTTP 写请求：
+
+```powershell
+workbench-agent literature ingest `
+  .\research_outputs\20260829T174702Z\result.json `
+  --dry-run
+```
+
+真实手动 ingest：
+
+```powershell
+workbench-agent literature ingest `
+  .\research_outputs\20260829T174702Z\result.json
+```
+
+默认读取 `result.json` 同目录的 `report.md`，也可通过 `--report` 显式指定。固定流程是：V0.1 output validator → 确定性 schema v2 映射 → Workbench HTTP ingest。validator 失败时不会创建 client 写请求。`ingest_identity` 是 canonical result JSON 的 SHA-256；相同 result 会得到相同 run identity，Workbench 的第二次 ingest 是零写入重放。映射会保留 profile、lookback、候选/验证/推荐数量、warnings、source status、Zotero context summary、Top recommendations、verified alternatives、完整分项评分、date/evidence 信息，并过滤本地 `zotero-cli` executable 路径。
+
+此命令不运行 Radar、不访问 Zotero、不访问 Workbench SQLite、不注册 scheduler/daemon/automation，也不会把 review 状态反写 Zotero。
 
 ## Run manifest contract
 

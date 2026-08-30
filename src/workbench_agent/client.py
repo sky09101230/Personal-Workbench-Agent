@@ -31,6 +31,7 @@ class WorkbenchClient:
             headers=headers,
             timeout=timeout,
             transport=transport,
+            trust_env=False,
         )
 
     def __enter__(self) -> WorkbenchClient:

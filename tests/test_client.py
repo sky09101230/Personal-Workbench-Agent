@@ -55,6 +55,19 @@ def test_health_and_authorization_header() -> None:
         assert client.health() == {"status": "ok"}
 
 
+def test_client_does_not_inherit_system_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"status": "ok"})
+    )
+
+    with WorkbenchClient("http://127.0.0.1:8000", None, transport=transport) as client:
+        assert client._client._trust_env is False
+        assert client.health() == {"status": "ok"}
+
+
 def test_heartbeat_payload() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path.endswith("/devices/heartbeat")

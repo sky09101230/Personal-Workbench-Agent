@@ -5,7 +5,11 @@ from types import SimpleNamespace
 import pytest
 
 from workbench_agent.cli import build_parser, main
-from workbench_agent.errors import CodexExecutionError, ResearchTaskError
+from workbench_agent.errors import (
+    CodexExecutionError,
+    LiteratureRadarValidationError,
+    ResearchTaskError,
+)
 
 
 def write_config(tmp_path: Path, project_path: Path) -> Path:
@@ -212,3 +216,158 @@ def test_cli_loads_dotenv_next_to_selected_config(
         "heartbeat": True,
     }
     assert "Heartbeat accepted" in capsys.readouterr().out  # type: ignore[attr-defined]
+
+
+def fake_literature_result() -> tuple[
+    dict[str, object],
+    dict[str, object],
+    dict[str, object],
+]:
+    return (
+        {
+            "ingest_identity": f"sha256:{'a' * 64}",
+            "candidate_count": 30,
+            "verified_candidate_count": 9,
+            "recommended_count": 5,
+            "papers": [{} for _ in range(9)],
+        },
+        {
+            "run_id": "research-run:radar",
+            "created_run": True,
+            "created_papers": 9,
+            "created_recommendations": 9,
+        },
+        {"ok": True, "source_count": 5},
+    )
+
+
+def test_parser_has_nested_literature_ingest_command() -> None:
+    args = build_parser().parse_args(
+        ["literature", "ingest", "result.json", "--dry-run"]
+    )
+
+    assert args.command == "literature"
+    assert args.literature_command == "ingest"
+    assert args.result == Path("result.json")
+    assert args.report is None
+    assert args.dry_run is True
+
+
+def test_literature_dry_run_needs_no_token_or_network(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeLiteratureService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def ingest(
+            self,
+            result: Path,
+            *,
+            report_path: Path | None,
+            dry_run: bool,
+        ) -> tuple[dict[str, object], None, dict[str, object]]:
+            assert result == tmp_path / "result.json"
+            assert report_path is None
+            assert dry_run
+            payload, _, validation = fake_literature_result()
+            return payload, None, validation
+
+    monkeypatch.setattr(
+        "workbench_agent.cli.LiteratureIngestService",
+        FakeLiteratureService,
+    )
+
+    result = main(
+        [
+            "--config",
+            str(write_config(tmp_path, tmp_path)),
+            "literature",
+            "ingest",
+            str(tmp_path / "result.json"),
+            "--dry-run",
+        ]
+    )
+
+    assert result == 0
+    output = capsys.readouterr().out  # type: ignore[attr-defined]
+    assert "validation passed" in output
+    assert "Recommended: 5" in output
+    assert "no Workbench write" in output
+
+
+def test_literature_normal_success_uses_token(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeLiteratureService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def ingest(
+            self,
+            result: Path,
+            *,
+            report_path: Path | None,
+            dry_run: bool,
+        ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+            assert not dry_run
+            return fake_literature_result()
+
+    monkeypatch.setenv("MISSING_TOKEN", "secret")
+    monkeypatch.setattr(
+        "workbench_agent.cli.LiteratureIngestService",
+        FakeLiteratureService,
+    )
+
+    result = main(
+        [
+            "--config",
+            str(write_config(tmp_path, tmp_path)),
+            "literature",
+            "ingest",
+            str(tmp_path / "result.json"),
+        ]
+    )
+
+    assert result == 0
+    output = capsys.readouterr().out  # type: ignore[attr-defined]
+    assert "Workbench ingest accepted" in output
+    assert "research-run:radar" in output
+
+
+def test_literature_validation_error_has_no_traceback(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingLiteratureService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def ingest(self, *args: object, **kwargs: object) -> object:
+            raise LiteratureRadarValidationError("validator rejected result")
+
+    monkeypatch.setattr(
+        "workbench_agent.cli.LiteratureIngestService",
+        FailingLiteratureService,
+    )
+
+    result = main(
+        [
+            "--config",
+            str(write_config(tmp_path, tmp_path)),
+            "literature",
+            "ingest",
+            str(tmp_path / "result.json"),
+            "--dry-run",
+        ]
+    )
+
+    assert result == 2
+    error = capsys.readouterr().err  # type: ignore[attr-defined]
+    assert "validator rejected result" in error
+    assert "Traceback" not in error
